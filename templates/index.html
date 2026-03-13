@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}New Prediction - EduPredict{% endblock %}
+{% block content %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="card bg-dark-panel shadow-lg" style="width: 100%; max-width: 600px;">
+        <div class="card-header border-secondary text-center py-3">
+            <h4 class="mb-0 fw-bold">Student Risk Predictor</h4>
+        </div>
+        <div class="card-body p-4">
+            <form action="/predict" method="POST">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Attendance (%)</label>
+                        <input type="number" step="0.1" class="form-control" name="attendance" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Internal Marks</label>
+                        <input type="number" step="0.1" class="form-control" name="internal" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Assignment Score</label>
+                        <input type="number" step="0.1" class="form-control" name="assignment" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Quiz Score</label>
+                        <input type="number" step="0.1" class="form-control" name="quiz" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mt-4 fw-bold">Generate Prediction</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+Flask
+scikit-learn
+pandas
+joblib
+numpy
+Flask-SQLAlchemy
+Flask-Login
+Werkzeug

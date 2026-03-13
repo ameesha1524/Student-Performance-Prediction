@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Login - EduPredict{% endblock %}
+
+{% block content %}
+<div class="container col-xl-10 col-xxl-8 px-4 py-5" style="min-height: 80vh; display: flex; align-items: center;">
+    <div class="row align-items-center g-lg-5 py-5 w-100">
+      
+      <div class="col-lg-7 text-center text-lg-start">
+        <h1 class="display-4 fw-bold lh-1 text-white mb-3">
+          Welcome to <span class="text-primary">EduPredict</span>
+        </h1>
+        <p class="col-lg-10 fs-4 text-light">
+          Empower your teaching with AI-driven insights. Log in to access the analytics dashboard, identify at-risk students, and predict academic outcomes before they happen.
+        </p>
+      </div>
+
+      <div class="col-md-10 mx-auto col-lg-5">
+        <form class="p-4 p-md-5 border-0 rounded-4 shadow-lg bg-dark-panel" action="/login" method="POST">
+          
+          <div class="form-floating mb-3">
+            <input type="text" class="form-control" id="floatingInput" name="username" placeholder="Username" required autofocus>
+            <label for="floatingInput" class="text-muted">Username</label>
+          </div>
+          
+          <div class="form-floating mb-3">
+            <input type="password" class="form-control" id="floatingPassword" name="password" placeholder="Password" required>
+            <label for="floatingPassword" class="text-muted">Password</label>
+          </div>
+          
+          <div class="checkbox mb-3 text-light">
+            <label>
+              <input type="checkbox" value="remember-me" class="form-check-input me-2 border-secondary"> Remember me
+            </label>
+          </div>
+          
+          <button class="w-100 btn btn-lg btn-primary fw-bold" type="submit">Sign in</button>
+          
+          <hr class="my-4" style="border-color: #374151;">
+          
+          <small class="text-secondary d-block text-center">
+            Default test accounts:<br>
+            <strong>teacher1</strong> (pass123) | <strong>admin</strong> (admin123)
+          </small>
+        </form>
+      </div>
+      
+    </div>
+</div>
+
+<style>
+    /* Adjusts the background of the floating label when it shrinks to the top */
+    .form-floating > .form-control:focus ~ label, 
+    .form-floating > .form-control:not(:placeholder-shown) ~ label {
+        color: #9ca3af !important;
+        background-color: transparent !important;
+    }
+    .form-floating > .form-control {
+        padding-top: 1.625rem;
+        padding-bottom: 0.625rem;
+    }
+</style>
+{% endblock %}
