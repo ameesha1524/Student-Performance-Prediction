@@ -5,12 +5,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import joblib
 import numpy as np
-import os
 import pandas as pd
 
 app = Flask(__name__)
-app = Flask(__name__)
 app.jinja_env.globals.update(zip=zip)
+
 app.config['SECRET_KEY'] = 'super_secret_key_change_in_production'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///school.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -19,6 +18,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+# Load the machine learning model
 try:
     model = joblib.load('student_model.pkl')
 except FileNotFoundError:
@@ -29,20 +29,22 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
-    role = db.Column(db.String(50), nullable=False) 
+    role = db.Column(db.String(50), nullable=False)
 
 class PredictionHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    student_roll = db.Column(db.String(50)) # Track unique students
+    student_roll = db.Column(db.String(50))
+
     attendance = db.Column(db.Float)
-    internal = db.Column(db.Float)
-    assignment = db.Column(db.Float)
-    quiz = db.Column(db.Float)
+    cat1 = db.Column(db.Float)
+    cat2 = db.Column(db.Float)
+    assignment_quiz = db.Column(db.Float)
+
     result = db.Column(db.String(50))
     risk_level = db.Column(db.String(50))
     grade = db.Column(db.String(5))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow) # For Time-Series tracking
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -58,10 +60,17 @@ def home():
 def login():
     if request.method == 'POST':
         user = User.query.filter_by(username=request.form.get('username')).first()
+
         if user and check_password_hash(user.password, request.form.get('password')):
             login_user(user)
-            return redirect(url_for('dashboard')) if user.role in ['teacher', 'admin'] else redirect(url_for('predict_form'))
+
+            if user.role in ['teacher', 'admin']:
+                return redirect(url_for('dashboard'))
+            else:
+                return redirect(url_for('predict_form'))
+
         flash('Login Failed.', 'danger')
+
     return render_template('login.html')
 
 @app.route('/logout')
@@ -75,33 +84,46 @@ def logout():
 def dashboard():
     if current_user.role not in ['teacher', 'admin']:
         return redirect(url_for('predict_form'))
-        
+
     selected_student = request.args.get('student_roll')
-    records = PredictionHistory.query.filter_by(teacher_id=current_user.id).order_by(PredictionHistory.created_at.desc()).all()
-    
-    # Global Stats
+
+    records = PredictionHistory.query.filter_by(
+        teacher_id=current_user.id
+    ).order_by(PredictionHistory.created_at.desc()).all()
+
     low_risk = sum(1 for r in records if r.risk_level == "LOW RISK")
     medium_risk = sum(1 for r in records if r.risk_level == "MEDIUM RISK")
     high_risk = sum(1 for r in records if r.risk_level == "HIGH RISK")
-    
-    # Historical Trend Logic
+
     historical_labels = []
     historical_scores = []
+
     if selected_student:
-        history = PredictionHistory.query.filter_by(teacher_id=current_user.id, student_roll=selected_student).order_by(PredictionHistory.created_at.asc()).all()
+        history = PredictionHistory.query.filter_by(
+            teacher_id=current_user.id,
+            student_roll=selected_student
+        ).order_by(PredictionHistory.created_at.asc()).all()
+
         historical_labels = [h.created_at.strftime('%b %d') for h in history]
-        historical_scores = [(h.internal + h.assignment + h.quiz) for h in history]
+        historical_scores = [(h.cat1 + h.cat2 + h.assignment_quiz) for h in history]
 
     all_grades = [r.grade for r in records]
     grade_dist = [all_grades.count(g) for g in ['S', 'A', 'B', 'C', 'D', 'E', 'F']]
 
-    return render_template('dashboard.html', 
-                           low_risk=low_risk, medium_risk=medium_risk, high_risk=high_risk,
-                           historical_labels=historical_labels, historical_scores=historical_scores,
-                           selected_student=selected_student, grade_distribution=grade_dist,
-                           attendance_data=[r.attendance for r in records],
-                           performance_data=[(r.internal + r.assignment + r.quiz) for r in records],
-                           total_predictions=len(records), records=records)
+    return render_template(
+        'dashboard.html',
+        low_risk=low_risk,
+        medium_risk=medium_risk,
+        high_risk=high_risk,
+        historical_labels=historical_labels,
+        historical_scores=historical_scores,
+        selected_student=selected_student,
+        grade_distribution=grade_dist,
+        attendance_data=[r.attendance for r in records],
+        performance_data=[(r.cat1 + r.cat2 + r.assignment_quiz) for r in records],
+        total_predictions=len(records),
+        records=records
+    )
 
 @app.route('/predict_form')
 @login_required
@@ -112,46 +134,84 @@ def predict_form():
 @login_required
 def predict():
     try:
+        if model is None:
+            return "Error: Machine learning model is not loaded. Check 'student_model.pkl'."
+
         roll = request.form.get('student_roll', 'N/A')
         att = float(request.form['attendance'])
-        inter = float(request.form['internal'])
-        assgn = float(request.form['assignment'])
-        qz = float(request.form['quiz'])
-        
-        pred = model.predict(np.array([[att, inter, assgn, qz]]))[0]
-        total = inter + assgn + qz
-        
-        # Explainable AI Logic
+        cat1 = float(request.form['cat1'])
+        cat2 = float(request.form['cat2'])
+        aq = float(request.form['assignment_quiz'])
+
+        pred = model.predict(np.array([[att, cat1, cat2, aq]]))[0]
+        total = cat1 + cat2 + aq
         importances = model.feature_importances_.tolist()
-        student_pcts = [(att), (inter/50*100), (assgn/30*100), (qz/20*100)]
-        
-        # Grading & Risk Logic
+
+        student_pcts = [
+            (att),
+            (cat1 / 50 * 100),
+            (cat2 / 50 * 100),
+            (aq / 50 * 100)
+        ]
+
         if pred == 0:
-            res, risk, css, grd = "FAIL", "HIGH RISK", "danger", "F"
+            res = "FAIL"
+            risk = "HIGH RISK"
+            css = "danger"
+            grd = "F"
         else:
             res = "PASS"
-            if total >= 90: grd = 'S'
-            elif total >= 80: grd = 'A'
-            elif total >= 70: grd = 'B'
-            elif total >= 60: grd = 'C'
-            elif total >= 50: grd = 'D'
-            elif total >= 40: grd = 'E'
-            else: grd = 'F'
-            
-            if att < 60 or grd == 'F': risk, css = "HIGH RISK", "danger"
-            elif (60 <= att <= 75) or (grd in ['D', 'E']): risk, css = "MEDIUM RISK", "warning"
-            else: risk, css = "LOW RISK", "success"
 
-        new_rec = PredictionHistory(teacher_id=current_user.id, student_roll=roll, attendance=att, 
-                                    internal=inter, assignment=assgn, quiz=qz, result=res, risk_level=risk, grade=grd)
+            if total >= 90:
+                grd = 'S'
+            elif total >= 80:
+                grd = 'A'
+            elif total >= 70:
+                grd = 'B'
+            elif total >= 60:
+                grd = 'C'
+            elif total >= 50:
+                grd = 'D'
+            elif total >= 40:
+                grd = 'E'
+            else:
+                grd = 'F'
+
+            if att < 60 or grd == 'F':
+                risk, css = "HIGH RISK", "danger"
+            elif (60 <= att <= 75) or (grd in ['D', 'E']):
+                risk, css = "MEDIUM RISK", "warning"
+            else:
+                risk, css = "LOW RISK", "success"
+
+        new_rec = PredictionHistory(
+            teacher_id=current_user.id,
+            student_roll=roll,
+            attendance=att,
+            cat1=cat1,
+            cat2=cat2,
+            assignment_quiz=aq,
+            result=res,
+            risk_level=risk,
+            grade=grd
+        )
+
         db.session.add(new_rec)
         db.session.commit()
 
-        # Simplified Insight for result page
-        insight = f"Primary impact: <b>{['Attendance', 'Internal', 'Assignment', 'Quiz'][np.argmax(importances)]}</b>"
-        
-        return render_template('result.html', prediction_text=res, risk_level=risk, css_class=css, 
-                               grade=grd, total_score=total, student_pcts=student_pcts, insight_text=insight)
+        insight = f"Primary impact: <b>{['Attendance','CAT-I','CAT-II','Assignment/Quiz'][np.argmax(importances)]}</b>"
+
+        return render_template(
+            'result.html',
+            prediction_text=res,
+            risk_level=risk,
+            css_class=css,
+            grade=grd,
+            total_score=total,
+            student_pcts=student_pcts,
+            insight_text=insight
+        )
+
     except Exception as e:
         return str(e)
 
@@ -159,42 +219,48 @@ def predict():
 @login_required
 def predict_bulk():
     file = request.files.get('file')
+
     if file and file.filename.endswith('.csv'):
         try:
+            if model is None:
+                flash("Error: Machine learning model is not loaded.", "danger")
+                return redirect(url_for('predict_form'))
+
             df = pd.read_csv(file)
-            # Clean up column names (lowercase and remove spaces)
             df.columns = df.columns.str.strip().str.lower()
-            
             records_to_add = []
-            
+
             for _, row in df.iterrows():
-                # Extract data from CSV row
                 roll = str(row.get('student_roll', 'Bulk-User'))
                 att = float(row['attendance'])
-                inter = float(row['internal'])
-                assgn = float(row['assignment'])
-                qz = float(row['quiz'])
-                
-                # 1. AI Model Prediction
-                input_data = np.array([[att, inter, assgn, qz]])
+                cat1 = float(row['cat1'])
+                cat2 = float(row['cat2'])
+                aq = float(row['assignment_quiz'])
+
+                input_data = np.array([[att, cat1, cat2, aq]])
                 pred = model.predict(input_data)[0]
-                total = inter + assgn + qz
-                
-                # 2. Advanced Grading & Risk Logic (The Fix)
+                total = cat1 + cat2 + aq
+
                 if pred == 0:
                     res, risk, grd = "FAIL", "HIGH RISK", "F"
                 else:
                     res = "PASS"
-                    # Calculate Grade based on Total Score
-                    if total >= 90: grd = 'S'
-                    elif total >= 80: grd = 'A'
-                    elif total >= 70: grd = 'B'
-                    elif total >= 60: grd = 'C'
-                    elif total >= 50: grd = 'D'
-                    elif total >= 40: grd = 'E'
-                    else: grd = 'F'
-                    
-                    # Calculate Risk Level based on Attendance and Grade
+
+                    if total >= 90:
+                        grd = 'S'
+                    elif total >= 80:
+                        grd = 'A'
+                    elif total >= 70:
+                        grd = 'B'
+                    elif total >= 60:
+                        grd = 'C'
+                    elif total >= 50:
+                        grd = 'D'
+                    elif total >= 40:
+                        grd = 'E'
+                    else:
+                        grd = 'F'
+
                     if att < 60 or grd == 'F':
                         risk = "HIGH RISK"
                     elif (60 <= att <= 75) or (grd in ['D', 'E']):
@@ -202,30 +268,29 @@ def predict_bulk():
                     else:
                         risk = "LOW RISK"
 
-                # Create the database record
                 new_rec = PredictionHistory(
-                    teacher_id=current_user.id, 
-                    student_roll=roll, 
-                    attendance=att, 
-                    internal=inter, 
-                    assignment=assgn, 
-                    quiz=qz, 
-                    result=res, 
-                    risk_level=risk, 
+                    teacher_id=current_user.id,
+                    student_roll=roll,
+                    attendance=att,
+                    cat1=cat1,
+                    cat2=cat2,
+                    assignment_quiz=aq,
+                    result=res,
+                    risk_level=risk,
                     grade=grd
                 )
                 records_to_add.append(new_rec)
-            
-            # Batch save for better performance
+
             db.session.add_all(records_to_add)
             db.session.commit()
-            flash(f"Success! Processed {len(records_to_add)} students with full grading logic.", "success")
+
+            flash(f"Success! Processed {len(records_to_add)} students.", "success")
             return redirect(url_for('dashboard'))
-            
+
         except Exception as e:
             flash(f"Error processing CSV: {str(e)}", "danger")
             return redirect(url_for('predict_form'))
-            
+
     flash("Invalid file format. Please upload a .csv file.", "danger")
     return redirect(url_for('predict_form'))
 
@@ -233,13 +298,33 @@ def predict_bulk():
 @login_required
 def export_data():
     recs = PredictionHistory.query.filter_by(teacher_id=current_user.id).all()
-    df = pd.DataFrame([{ 'Roll': r.student_roll, 'Grade': r.grade, 'Result': r.result } for r in recs])
-    return Response(df.to_csv(index=False), mimetype="text/csv", headers={"Content-disposition": "attachment; filename=report.csv"})
+
+    df = pd.DataFrame([
+        {
+            'Roll': r.student_roll,
+            'Grade': r.grade,
+            'Result': r.result
+        }
+        for r in recs
+    ])
+
+    return Response(
+        df.to_csv(index=False),
+        mimetype="text/csv",
+        headers={"Content-disposition": "attachment; filename=report.csv"}
+    )
 
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
         if not User.query.filter_by(username='teacher1').first():
-            db.session.add(User(username='teacher1', password=generate_password_hash('pass123'), role='teacher'))
+            db.session.add(
+                User(
+                    username='teacher1',
+                    password=generate_password_hash('pass123'),
+                    role='teacher'
+                )
+            )
             db.session.commit()
+
     app.run(debug=True)

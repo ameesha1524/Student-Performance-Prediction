@@ -73,23 +73,23 @@
                             <input class="form-control py-3" type="number" step="0.1" min="0" max="100" name="attendance" placeholder="0 - 100" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-light small fw-bold text-uppercase">Internal (Max 50)</label>
-                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="50" id="internal" name="internal" placeholder="0 - 50" required>
+                            <label class="form-label text-light small fw-bold text-uppercase">CAT-I (Max 50)</label>
+                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="50" id="cat1" name="cat1" placeholder="0 - 50" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-light small fw-bold text-uppercase">Assignment (Max 30)</label>
-                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="30" id="assignment" name="assignment" placeholder="0 - 30" required>
+                            <label class="form-label text-light small fw-bold text-uppercase">CAT-II (Max 50)</label>
+                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="50" id="cat2" name="cat2" placeholder="0 - 50" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label text-light small fw-bold text-uppercase">Quiz (Max 20)</label>
-                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="20" id="quiz" name="quiz" placeholder="0 - 20" required>
+                            <label class="form-label text-light small fw-bold text-uppercase">Assignment/Quiz (Max 30)</label>
+                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="30" id="assignment_quiz" name="assignment_quiz" placeholder="0 - 30" required>
                         </div>
                     </div>
                     
                     <div class="mt-3 text-end px-3 py-2 rounded" style="background-color: rgba(255,255,255,0.05); border: 1px solid #374151;">
                         <span class="text-white me-2">Total Score:</span>
-                        <span id="totalScore" class="fs-5 fw-bold text-white">0</span> <span class="text-white">/ 100</span>
-                        <div id="scoreWarning" class="text-danger small d-none mt-1 fw-bold">Scores cannot exceed 100!</div>
+                        <span id="totalScore" class="fs-5 fw-bold text-white">0</span> <span class="text-white">/ 130</span>
+                        <div id="scoreWarning" class="text-danger small d-none mt-1 fw-bold">Scores cannot exceed 130!</div>
                     </div>
 
                     <button type="submit" class="btn btn-primary w-100 py-3 mt-4 fw-bold text-uppercase" id="submitBtn">Generate Prediction</button>
@@ -101,7 +101,7 @@
                     <div class="file-upload-box mt-3 mb-4">
                         <i class="bi bi-filetype-csv text-muted" style="font-size: 3rem;"></i>
                         <h5 class="text-white mt-3">Upload Class Data</h5>
-                        <p class="text-muted small mb-4">Ensure your CSV has the columns:<br><code>student_roll, attendance, internal, assignment, quiz</code></p>
+                        <p class="text-muted small mb-4">Ensure your CSV has the columns:<br><code>student_roll, attendance, cat1, cat2, assignment_quiz</code></p>
                         
                         <input class="form-control bg-dark" type="file" name="file" accept=".csv" required>
                     </div>
@@ -115,21 +115,22 @@
 
 <script>
     // Live Score Tracker for Single Upload Tab
-    const internalInput = document.getElementById('internal');
-    const assignmentInput = document.getElementById('assignment');
-    const quizInput = document.getElementById('quiz');
+    const cat1Input = document.getElementById('cat1');
+    const cat2Input = document.getElementById('cat2');
+    const aqInput = document.getElementById('assignment_quiz');
     const totalScoreDisplay = document.getElementById('totalScore');
     const scoreWarning = document.getElementById('scoreWarning');
     const submitBtn = document.getElementById('submitBtn');
 
     function calculateTotal() {
-        let total = (parseFloat(internalInput.value) || 0) + 
-                    (parseFloat(assignmentInput.value) || 0) + 
-                    (parseFloat(quizInput.value) || 0);
+        let total = (parseFloat(cat1Input.value) || 0) + 
+                    (parseFloat(cat2Input.value) || 0) + 
+                    (parseFloat(aqInput.value) || 0);
         
         totalScoreDisplay.textContent = total % 1 === 0 ? total : total.toFixed(1);
 
-        if (total > 100) {
+        // Max possible score is now 50 + 50 + 30 = 130
+        if (total > 130) {
             totalScoreDisplay.classList.replace('text-white', 'text-danger');
             scoreWarning.classList.remove('d-none');
             submitBtn.disabled = true;
@@ -140,6 +141,6 @@
         }
     }
 
-    [internalInput, assignmentInput, quizInput].forEach(input => input.addEventListener('input', calculateTotal));
+    [cat1Input, cat2Input, aqInput].forEach(input => input.addEventListener('input', calculateTotal));
 </script>
 {% endblock %}
