@@ -1,103 +1,123 @@
 {% extends "base.html" %}
-{% block title %}Result - EduPredict{% endblock %}
+
+{% block title %}Prediction Result - EduPredict{% endblock %}
 
 {% block extra_css %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
-<div class="container d-flex justify-content-center align-items-center" style="min-height: 70vh;">
-    <div class="card bg-dark-panel p-4 rounded-4 shadow-lg" style="width: 100%; max-width: 800px;">
+<div class="container pb-5" style="max-width: 900px; margin-top: 2rem;">
+    
+    <div class="card bg-dark-panel p-5 rounded-4 border-0 shadow text-center mb-4">
+        <h2 class="text-white mb-3">AI Prediction Result</h2>
         
-        <div class="row align-items-center">
+        <h1 class="display-3 fw-bold text-{{ css_class }} mb-3">
+            {{ prediction_text }}
+        </h1>
+        
+        <div class="d-flex justify-content-center gap-3 mb-4">
+            <span class="badge bg-secondary fs-5 py-2 px-3">Grade: {{ grade }}</span>
+            <span class="badge bg-{{ css_class }} fs-5 py-2 px-3">{{ risk_level }}</span>
+            <span class="badge bg-primary fs-5 py-2 px-3">Total: {{ total_score }}/100</span>
+        </div>
+        
+        <p class="text-light fs-5 border border-secondary rounded p-3 bg-dark" style="background-color: rgba(255,255,255,0.05) !important;">
+            <i class="bi bi-robot me-2 text-primary"></i> {{ insight_text | safe }}
+        </p>
+    </div>
+
+    <div class="card bg-dark-panel p-4 rounded-4 border-0 shadow mb-4">
+        <h4 class="text-white mb-3"><i class="bi bi-cpu text-primary me-2"></i>Model Consensus Engine</h4>
+        <p class="text-secondary small mb-3">Behind the scenes: How our 4 different AI algorithms voted on this student's data.</p>
+        
+        <div class="row g-3 text-center">
+            {% for model_name, vote in model_votes.items() %}
+            <div class="col-md-3">
+                <div class="p-3 border rounded h-100" style="border-color: #374151 !important; background-color: rgba(255,255,255,0.02);">
+                    <div class="text-secondary small text-uppercase fw-bold mb-2">{{ model_name }}</div>
+                    <span class="badge {{ 'bg-success' if vote == 'PASS' else 'bg-danger' }} w-100 py-2 fs-6">
+                        {{ vote }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
             
-            <div class="col-md-5 text-center pe-md-4 mb-4 mb-md-0" style="border-right: 1px solid #374151;">
-                <div class="mb-3">
-                    {% if css_class == 'success' %}
-                        <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
-                    {% elif css_class == 'warning' %}
-                        <i class="bi bi-exclamation-circle-fill text-warning" style="font-size: 4rem;"></i>
-                    {% else %}
-                        <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 4rem;"></i>
-                    {% endif %}
-                </div>
-
-                <h2 class="fw-bold text-{{ css_class }}">{{ prediction_text }}</h2>
-                <p class="mt-2 text-light">Risk Level: <span class="badge bg-{{ css_class }}">{{ risk_level }}</span></p>
-                
-                <div class="bg-dark rounded p-3 my-3" style="border: 1px solid #374151;">
-                    <div class="row text-center">
-                        <div class="col-6" style="border-right: 1px solid #374151;">
-                            <small class="text-muted d-block">Score</small>
-                            <span class="fs-4 fw-bold text-white">{{ total_score }}</span>
-                        </div>
-                        <div class="col-6">
-                            <small class="text-muted d-block">Grade</small>
-                            <span class="fs-4 fw-bold text-{{ css_class }}">{{ grade }}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <a href="/predict_form" class="btn btn-outline-light w-100 mb-2 py-2 fw-bold">Analyze Another</a>
-                {% if current_user.role in ['teacher', 'admin'] %}
-                <a href="/dashboard" class="btn btn-primary w-100 py-2 fw-bold">Back to Dashboard</a>
-                {% endif %}
-            </div>
-
-            <div class="col-md-7 ps-md-4">
-                <h5 class="text-white text-center mb-3"><i class="bi bi-radar text-primary me-2"></i>AI Performance Analysis</h5>
-                
-                <div style="height: 250px; width: 100%;">
-                    <canvas id="radarChart"></canvas>
-                </div>
-                
-                <div class="mt-4 p-3 rounded" style="background-color: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6;">
-                    <p class="mb-0 text-light small fs-6">
-                        <i class="bi bi-robot text-primary me-2"></i>{{ insight_text | safe }}
-                    </p>
+            <div class="col-md-3">
+                <div class="p-3 border rounded h-100" style="border-color: #3b82f6 !important; background-color: rgba(59, 130, 246, 0.1);">
+                    <div class="text-primary small text-uppercase fw-bold mb-2">Final Ensemble</div>
+                    <span class="badge {{ 'bg-success' if prediction_text == 'PASS' else 'bg-danger' }} w-100 py-2 fs-6 shadow">
+                        {{ prediction_text }}
+                    </span>
                 </div>
             </div>
-
         </div>
     </div>
+
+    <div class="card bg-dark-panel p-4 rounded-4 border-0 shadow">
+        <h4 class="text-white mb-1"><i class="bi bi-bar-chart-steps text-primary me-2"></i>AI Decision Breakdown</h4>
+        <p class="text-secondary small mb-4">SHAP Force Plot: How each metric influenced the final prediction. Green pushes toward Pass, Red pushes toward Fail.</p>
+        
+        <div style="height: 300px;">
+            <canvas id="shapChart"></canvas>
+        </div>
+    </div>
+    
+    <div class="text-center mt-4">
+        <a href="/predict_form" class="btn btn-outline-primary px-4 me-2">Predict Another</a>
+        <a href="/dashboard" class="btn btn-primary px-4">Go to Dashboard</a>
+    </div>
+
 </div>
 
 <script>
-    // Configure the Radar Chart
-    Chart.defaults.color = '#9ca3af'; 
-    
-    new Chart(document.getElementById('radarChart'), {
-    type: 'radar',
-    data: {
-        labels: ['Attendance', 'Internal', 'Assignment', 'Quiz'],
-        datasets: [{
-            label: 'Student Capability',
-            data: {{ student_pcts | safe }},
-            backgroundColor: 'rgba(56, 121, 52, 0.2)', // Translucent Forest Green
-            borderColor: '#387934',                // Forest Green
-            pointBackgroundColor: '#ffcf00',       // Gold Points
-        }]
-    },yyy
+    // Grab the mathematical impacts from Python
+    const impacts = {{ shap_impacts | tojson }};
+    const features = ['Attendance', 'Internal', 'Assignment', 'Quiz'];
+
+    // Dynamic coloring: Green for positive impact, Red for negative impact
+    const barColors = impacts.map(val => val >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(236, 72, 153, 0.8)');
+    const borderColors = impacts.map(val => val >= 0 ? '#10b981' : '#ec4899');
+
+    Chart.defaults.color = '#ffffff';
+    Chart.defaults.borderColor = '#374151';
+
+    new Chart(document.getElementById('shapChart'), {
+        type: 'bar',
+        data: {
+            labels: features,
+            datasets: [{
+                label: 'Impact on Final Decision',
+                data: impacts,
+                backgroundColor: barColors,
+                borderColor: borderColors,
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
         options: {
+            indexAxis: 'y', // Makes the bar chart horizontal (Waterfall style)
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                r: {
-                    angleLines: { color: '#374151' }, // Spider web lines
-                    grid: { color: '#374151' },       // Circular grid lines
-                    pointLabels: { 
-                        color: '#f3f4f6', 
-                        font: { size: 12, family: "'Helvetica World', sans-serif" } 
-                    },
-                    ticks: { 
-                        display: false, // Hides the numbers on the rings to keep it clean
-                        min: 0, 
-                        max: 100 
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let val = context.raw.toFixed(2);
+                            return val > 0 ? `+${val} (Pushed towards Pass)` : `${val} (Pushed towards Fail)`;
+                        }
                     }
                 }
             },
-            plugins: {
-                legend: { display: false } // Hide legend since there's only one dataset
+            scales: {
+                x: {
+                    grid: { color: '#374151' },
+                    title: { display: true, text: 'Mathematical Weight (Log Odds)', color: '#9ca3af' }
+                },
+                y: {
+                    grid: { display: false }
+                }
             }
         }
     });
