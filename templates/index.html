@@ -4,166 +4,142 @@
 
 {% block extra_css %}
 <style>
-    /* Integrated EduPredict Dark Theme */
-    .section {
-        position: relative;
-        min-height: 80vh;
-    }
-
-    .section .section-center {
-        position: absolute;
-        top: 50%;
-        left: 0;
-        right: 0;
-        -webkit-transform: translateY(-50%);
-        transform: translateY(-50%);
-    }
-
-    .prediction-form {
-        position: relative;
+    .prediction-card {
         max-width: 642px;
         width: 100%;
         margin: auto;
         padding: 40px;
-        overflow: hidden;
-        /* Replaced the hotel image with a sleek dark gradient to match your panels */
         background: linear-gradient(135deg, #1f2937, #111827); 
         border-radius: 12px;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         border: 1px solid #374151;
-        z-index: 20;
     }
 
-    .prediction-form .form-header {
-        text-align: center;
-        position: relative;
-        margin-bottom: 30px;
-    }
-
-    .prediction-form .form-header h1 {
-        font-weight: 700;
-        font-size: 36px;
-        margin: 0px;
-        color: #fff;
-    }
-
-    .prediction-form .form-group {
-        position: relative;
-        margin-bottom: 30px;
-    }
-
-    .prediction-form .form-control {
+    .form-control {
         background-color: rgba(255, 255, 255, 0.05);
-        height: 60px;
-        padding: 0px 25px;
         border: 1px solid #374151;
-        border-radius: 8px;
         color: #fff;
-        -webkit-transition: 0.2s;
-        transition: 0.2s;
     }
-
-    .prediction-form .form-control::-webkit-input-placeholder { color: rgba(255, 255, 255, 0.4); }
-    .prediction-form .form-control:-ms-input-placeholder { color: rgba(255, 255, 255, 0.4); }
-    .prediction-form .form-control::placeholder { color: rgba(255, 255, 255, 0.4); }
-
-    .prediction-form .form-control:focus {
+    .form-control:focus {
         background-color: rgba(255, 255, 255, 0.1);
-        border-color: #0d6efd; /* Bootstrap Primary Blue instead of Orange */
+        border-color: #0d6efd;
         box-shadow: 0px 0px 0px 2px rgba(13, 110, 253, 0.3);
-        outline: none;
+        color: white;
     }
-
-    .prediction-form .form-label {
-        position: absolute;
-        top: -10px;
-        left: 20px;
-        background: #1f2937; /* Match form background */
-        padding: 0 10px;
-        color: #607ea9; /* Blue accent */
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 1.3px;
-        height: 20px;
-        line-height: 20px;
-        border-radius: 4px;
-    }
-
-    .prediction-form .submit-btn {
-        color: #fff;
-        background-color: #0f5ccf; /* Primary Blue */
-        font-weight: 700;
-        height: 60px;
-        padding: 10px 30px;
-        width: 100%;
+    
+    /* Styling for the custom tabs */
+    .nav-pills .nav-link { color: #9ca3af; border-radius: 8px; margin-bottom: 20px;}
+    .nav-pills .nav-link.active { background-color: #3b82f6; color: white; font-weight: bold;}
+    
+    .file-upload-box {
+        border: 2px dashed #4b5563;
         border-radius: 8px;
-        border: none;
-        text-transform: uppercase;
-        font-size: 16px;
-        letter-spacing: 1.3px;
-        -webkit-transition: 0.2s all;
-        transition: 0.2s all;
+        padding: 40px 20px;
+        text-align: center;
+        background-color: rgba(255, 255, 255, 0.02);
+        transition: 0.3s;
     }
-
-    .prediction-form .submit-btn:hover,
-    .prediction-form .submit-btn:focus {
-        background-color: #0b5ed7;
-        box-shadow: 0 4px 15px rgba(13, 110, 253, 0.4);
-    }
+    .file-upload-box:hover { border-color: #3b82f6; background-color: rgba(59, 130, 246, 0.05); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div id="prediction" class="section">
-    <div class="section-center">
-        <div class="container">
-            <div class="row">
-                <div class="prediction-form">
-                    <div class="form-header">
-                        <p class="text-secondary mt-2">Enter student metrics to generate a performance analysis.</p>
-                    </div>
-                    
-                    <form action="/predict" method="POST">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <span class="form-label">Attendance (%)</span>
-                                    <input class="form-control" type="number" step="0.1" name="attendance" placeholder="e.g. 85.5" required>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <span class="form-label">Internal Marks</span>
-                                    <input class="form-control" type="number" step="0.1" name="internal" placeholder="e.g. 42" required>
-                                </div>
-                            </div>
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh; padding-top: 2rem;">
+    <div class="prediction-card">
+        
+        <h3 class="mb-4 fw-bold text-center text-white"><i class="bi bi-magic text-primary me-2"></i>Student Risk Predictor</h3>
+        
+        <ul class="nav nav-pills nav-fill mb-3" id="pills-tab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#single-upload" type="button">Single Student</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="pill" data-bs-target="#bulk-upload" type="button">Bulk CSV Upload</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="pills-tabContent">
+            
+            <div class="tab-pane fade show active" id="single-upload">
+                <form action="/predict" method="POST">
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-12 mb-2">
+                            <label class="form-label text-primary small fw-bold text-uppercase">Student Roll Number / Name</label>
+                            <input class="form-control py-3" type="text" name="student_roll" placeholder="e.g. STU-101" required>
                         </div>
 
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <span class="form-label">Assignment Score</span>
-                                    <input class="form-control" type="number" step="0.1" name="assignment" placeholder="e.g. 18" required>
-                                </div>
-                            </div>
-                            
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <span class="form-label">Quiz Score</span>
-                                    <input class="form-control" type="number" step="0.1" name="quiz" placeholder="e.g. 15" required>
-                                </div>
-                            </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-light small fw-bold text-uppercase">Attendance (%)</label>
+                            <input class="form-control py-3" type="number" step="0.1" min="0" max="100" name="attendance" placeholder="0 - 100" required>
                         </div>
-                        
-                        <div class="form-btn mt-3">
-                            <button type="submit" class="submit-btn">Generate Prediction</button>
+                        <div class="col-md-6">
+                            <label class="form-label text-light small fw-bold text-uppercase">Internal (Max 50)</label>
+                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="50" id="internal" name="internal" placeholder="0 - 50" required>
                         </div>
-                    </form>
-                </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-light small fw-bold text-uppercase">Assignment (Max 30)</label>
+                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="30" id="assignment" name="assignment" placeholder="0 - 30" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-light small fw-bold text-uppercase">Quiz (Max 20)</label>
+                            <input class="form-control py-3 score-input" type="number" step="0.1" min="0" max="20" id="quiz" name="quiz" placeholder="0 - 20" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 text-end px-3 py-2 rounded" style="background-color: rgba(255,255,255,0.05); border: 1px solid #374151;">
+                        <span class="text-white me-2">Total Score:</span>
+                        <span id="totalScore" class="fs-5 fw-bold text-white">0</span> <span class="text-white">/ 100</span>
+                        <div id="scoreWarning" class="text-danger small d-none mt-1 fw-bold">Scores cannot exceed 100!</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-3 mt-4 fw-bold text-uppercase" id="submitBtn">Generate Prediction</button>
+                </form>
             </div>
+
+            <div class="tab-pane fade" id="bulk-upload">
+                <form action="/predict_bulk" method="POST" enctype="multipart/form-data">
+                    <div class="file-upload-box mt-3 mb-4">
+                        <i class="bi bi-filetype-csv text-muted" style="font-size: 3rem;"></i>
+                        <h5 class="text-white mt-3">Upload Class Data</h5>
+                        <p class="text-muted small mb-4">Ensure your CSV has the columns:<br><code>student_roll, attendance, internal, assignment, quiz</code></p>
+                        
+                        <input class="form-control bg-dark" type="file" name="file" accept=".csv" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 py-3 fw-bold text-uppercase">Process Entire Class</button>
+                </form>
+            </div>
+
         </div>
     </div>
 </div>
+
+<script>
+    // Live Score Tracker for Single Upload Tab
+    const internalInput = document.getElementById('internal');
+    const assignmentInput = document.getElementById('assignment');
+    const quizInput = document.getElementById('quiz');
+    const totalScoreDisplay = document.getElementById('totalScore');
+    const scoreWarning = document.getElementById('scoreWarning');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function calculateTotal() {
+        let total = (parseFloat(internalInput.value) || 0) + 
+                    (parseFloat(assignmentInput.value) || 0) + 
+                    (parseFloat(quizInput.value) || 0);
+        
+        totalScoreDisplay.textContent = total % 1 === 0 ? total : total.toFixed(1);
+
+        if (total > 100) {
+            totalScoreDisplay.classList.replace('text-white', 'text-danger');
+            scoreWarning.classList.remove('d-none');
+            submitBtn.disabled = true;
+        } else {
+            totalScoreDisplay.classList.replace('text-danger', 'text-white');
+            scoreWarning.classList.add('d-none');
+            submitBtn.disabled = false;
+        }
+    }
+
+    [internalInput, assignmentInput, quizInput].forEach(input => input.addEventListener('input', calculateTotal));
+</script>
 {% endblock %}
