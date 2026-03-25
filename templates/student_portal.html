@@ -37,6 +37,12 @@
     
     .stat-box h6 { color: #9ca3af; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;}
     .stat-box h3 { color: #f9fafb; margin: 0; font-weight: bold;}
+    
+    .target-badge {
+        font-size: 1.1rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+    }
 </style>
 {% endblock %}
 
@@ -53,8 +59,34 @@
             <i class="bi bi-info-circle me-2"></i> No reports have been published by your teacher yet.
         </div>
     {% else %}
+    
+        {% if target_data %}
+        <div class="bg-dark-panel report-card p-4 shadow-lg mb-4" style="border: 1px solid #3b82f6; background: linear-gradient(145deg, #1f2937, #111827);">
+            <div class="text-center mb-4 border-bottom border-secondary pb-3">
+                <h4 class="text-light mb-1"><i class="bi bi-bullseye text-primary me-2"></i>Final Exam Targets</h4>
+                <p class="text-muted small m-0">Projected FAT Class Average: <strong>{{ target_data.fat_mean }} / 40</strong></p>
+            </div>
+            
+            <p class="text-center text-light mb-4 small">Based on your current internal marks and the relative class curve, here is what you need to score on the upcoming Final Exam (out of 40) to secure top grades:</p>
+            
+            <div class="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style="background-color: rgba(255,255,255,0.05); border: 1px solid #374151;">
+                <span class="text-light fw-bold fs-5">For an 'S' Grade</span>
+                <span class="badge target-badge {% if target_data.s_needed == 'Impossible (>40)' %}bg-danger{% elif target_data.s_needed == 'Secured!' %}bg-success{% else %}bg-primary{% endif %}">
+                    {{ target_data.s_needed }}
+                </span>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center p-3 rounded" style="background-color: rgba(255,255,255,0.05); border: 1px solid #374151;">
+                <span class="text-light fw-bold fs-5">For an 'A' Grade</span>
+                <span class="badge target-badge {% if target_data.a_needed == 'Impossible (>40)' %}bg-danger{% elif target_data.a_needed == 'Secured!' %}bg-success{% else %}bg-info text-dark{% endif %}">
+                    {{ target_data.a_needed }}
+                </span>
+            </div>
+        </div>
+        {% endif %}
+
         {% for record in records %}
-        <div class="bg-dark-panel report-card p-4 shadow-lg mb-5 border-secondary">
+        <div class="bg-dark-panel report-card p-4 shadow-lg mb-4 border-secondary">
             <div class="text-center mb-4 border-bottom border-secondary pb-3">
                 <h4 class="text-light mb-1">Academic Performance Report</h4>
                 <p class="text-muted small m-0">Generated on: {{ record.created_at.strftime('%B %d, %Y') if record.created_at else 'Recent' }}</p>
@@ -71,13 +103,13 @@
                 <div class="col-6 col-md-3">
                     <div class="stat-box">
                         <h6>Total Marks</h6>
-                        <h3>{{ record.total_score if record.total_score else '--' }}</h3>
+                        <h3 class="text-info">{{ record.total_score if record.total_score else '--' }}</h3>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="stat-box">
                         <h6>Class Avg</h6>
-                        <h3>{{ record.class_average if record.class_average else '--' }}</h3>
+                        <h3 class="text-warning">{{ record.class_average | round(1) if record.class_average else '--' }}</h3>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
