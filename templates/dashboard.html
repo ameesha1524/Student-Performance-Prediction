@@ -96,15 +96,49 @@
     Chart.defaults.color = '#ffffff';
     Chart.defaults.borderColor = '#374151';
 
-    // 1. Trend Chart
+    // 1. Trend Chart (Line)
     {% if historical_scores %}
     new Chart(document.getElementById('trendChart'), {
         type: 'line',
         data: {
-            labels: {{ historical_labels | safe }},
-            datasets: [{ label: 'Score Over Time', data: {{ historical_scores | safe }}, borderColor: '#3b82f6', tension: 0.3, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.1)' }]
+            labels: {{ historical_labels | tojson }},
+            datasets: [
+                { 
+                    label: 'Score Over Time', 
+                    data: {{ historical_scores | tojson }}, 
+                    borderColor: '#3b82f6', 
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3, 
+                    fill: true, 
+                    pointBackgroundColor: '#3b82f6',
+                    pointRadius: 4
+                }
+                {% if future_scores %}
+                ,{
+                    label: 'AI Predictive Forecast',
+                    data: {{ future_scores | tojson }}, 
+                    borderColor: '#ec4899', 
+                    borderWidth: 3,
+                    borderDash: [5, 5], 
+                    tension: 0.3,
+                    fill: false,
+                    pointBackgroundColor: '#ec4899',
+                    pointRadius: 5,
+                    pointStyle: 'rectRot' 
+                }
+                {% endif %}
+            ]
         },
-        options: { responsive: true, maintainAspectRatio: false }
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            scales: {
+                x: { grid: { color: '#374151' }, ticks: { color: '#ffffff' } },
+                y: { grid: { color: '#374151' }, ticks: { color: '#ffffff' }, min: 0, max: 100 }
+            },
+            plugins: { legend: { display: true, labels: { color: '#ffffff' } } }
+        }
     });
     {% endif %}
 
