@@ -23,12 +23,22 @@
         </div>
     </div>
 
-    <div class="card bg-dark-panel p-3 mb-4 rounded-4 border-0 shadow">
-        <form action="/dashboard" method="GET" class="d-flex gap-2">
-            <input type="text" name="student_roll" class="form-control" placeholder="Search Student Roll (e.g. STU-101)" value="{{ selected_student or '' }}">
-            <button type="submit" class="btn btn-primary px-4">Track Progress</button>
-            {% if selected_student %}<a href="/dashboard" class="btn btn-outline-secondary text-white">Clear</a>{% endif %}
+    <div class="card bg-dark-panel p-3 mb-4 rounded-4 border-0 shadow" style="border-left: 4px solid #8b5cf6 !important;">
+        <div class="d-flex align-items-center mb-2">
+            <i class="bi bi-robot text-purple me-2" style="font-size: 1.2rem; color: #8b5cf6;"></i>
+            <h6 class="text-white mb-0 fw-bold">EduPredict AI Assistant</h6>
+        </div>
+        
+        <form id="aiSearchForm" class="d-flex gap-2">
+            <input type="text" id="aiQuery" class="form-control bg-dark text-white border-secondary" 
+                   placeholder="Ask anything... (e.g., 'Show me all students with HIGH RISK and attendance below 75%')" required>
+            <button type="submit" class="btn text-white px-4 fw-bold" style="background-color: #8b5cf6; border-color: #8b5cf6;">
+                <span id="btnText">Ask AI</span>
+                <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
+            <button type="button" id="clearAiBtn" class="btn btn-outline-secondary text-white d-none">Reset</button>
         </form>
+        <small class="text-muted mt-2 d-block">Powered by Natural Language Processing. Type queries to filter the table below.</small>
     </div>
 
     {% if historical_scores %}
@@ -76,7 +86,7 @@
                         <th>Risk</th>
                     </tr>
                 </thead>
-                <tbody style="border-top: none;">
+                <tbody id="studentTableBody" style="border-top: none;">
                     {% for record in records %}
                     <tr style="border-bottom: 1px solid #374151;">
                         <td class="py-3">{{ record.student_roll }}</td>
@@ -142,7 +152,7 @@
     });
     {% endif %}
 
-    // 2. Risk Chart (Original Emerald, Amber, Pink)
+    // 2. Risk Chart
     new Chart(document.getElementById('riskChart'), {
         type: 'doughnut',
         data: { 
@@ -156,16 +166,16 @@
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
     });
 
-    // 3. Grade Chart (Original Indigo)
+    // 3. Grade Chart (FIXED TOJSON)
     new Chart(document.getElementById('gradeChart'), {
         type: 'bar',
-        data: { labels: ['S','A','B','C','D','E','F'], datasets: [{ data: {{ grade_distribution | safe }}, backgroundColor: '#6366f1' }] },
+        data: { labels: ['S','A','B','C','D','E','F'], datasets: [{ data: {{ grade_distribution | tojson }}, backgroundColor: '#6366f1' }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
     });
 
-    // 4. Scatter Chart (Original Deep Pink)
-    const attArr = {{ attendance_data | safe }};
-    const perfArr = {{ performance_data | safe }};
+    // 4. Scatter Chart (FIXED TOJSON)
+    const attArr = {{ attendance_data | tojson }};
+    const perfArr = {{ performance_data | tojson }};
     const scatterPoints = attArr.map((val, index) => ({ x: val, y: perfArr[index] }));
 
     new Chart(document.getElementById('scatterChart'), {
@@ -180,6 +190,77 @@
                 y: { title: { display: true, text: 'Total Score' }, min: 0, max: 100 }
             }
         }
+    });
+
+    // --- AI Assistant Logic ---
+    document.getElementById('aiSearchForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const query = document.getElementById('aiQuery').value;
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+        const clearBtn = document.getElementById('clearAiBtn');
+        const tableBody = document.getElementById('studentTableBody');
+
+        // UI Loading State
+        btnText.classList.add('d-none');
+        btnSpinner.classList.remove('d-none');
+
+        try {
+            // Send the prompt to your new Flask route
+            const response = await fetch('/api/ask_assistant', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: query })
+            });
+
+            const data = await response.json();
+
+            // Clear the existing table
+            tableBody.innerHTML = '';
+
+            // Check if the AI returned an error
+            if (data.error) {
+                tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">AI Error: ${data.error}</td></tr>`;
+            } 
+            // Check if no students matched
+            else if (data.results.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">No students matched your query.</td></tr>`;
+            } 
+            // Populate the table with the AI's results
+            else {
+                data.results.forEach(record => {
+                    const resultBadge = record.result === 'PASS' ? 'bg-success' : 'bg-danger';
+                    const riskColor = record.risk_level === 'LOW RISK' ? 'text-success' : 
+                                      record.risk_level === 'MEDIUM RISK' ? 'text-warning' : 'text-danger';
+
+                    tableBody.innerHTML += `
+                        <tr style="border-bottom: 1px solid #374151;">
+                            <td class="py-3">${record.student_roll}</td>
+                            <td>${record.attendance}%</td>
+                            <td><span class="badge bg-secondary">${record.grade}</span></td>
+                            <td><span class="badge ${resultBadge}">${record.result}</span></td>
+                            <td class="${riskColor} fw-bold">${record.risk_level}</td>
+                        </tr>
+                    `;
+                });
+            }
+            
+            // Show the reset button so the teacher can go back to viewing all students
+            clearBtn.classList.remove('d-none');
+
+        } catch (err) {
+            alert("Failed to connect to the AI Assistant backend. Make sure the /api/ask_assistant route is running in app.py!");
+        } finally {
+            // Restore UI
+            btnText.classList.remove('d-none');
+            btnSpinner.classList.add('d-none');
+        }
+    });
+
+    // Reset button logic: Reload the page to clear filters
+    document.getElementById('clearAiBtn').addEventListener('click', () => {
+        window.location.reload();
     });
 </script>
 {% endblock %}
