@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Study Buddy Match - EduPredict{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .match-card {
+        background: linear-gradient(135deg, #1e1b4b 0%, #111827 100%);
+        border: 2px solid #3b82f6;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    }
+    .synergy-badge {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(90deg, #3b82f6, #10b981);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .avatar-circle {
+        width: 80px;
+        height: 80px;
+        background: #374151;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 15px;
+        font-size: 1.5rem;
+        color: white;
+        border: 2px solid #60a5fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 850px;">
+    
+    <div class="match-card p-5 rounded-4 text-center text-white mb-4">
+        <div class="mb-4">
+            <span class="text-uppercase tracking-widest small text-secondary">Algorithm Result</span>
+            <h2 class="display-5 fw-bold">Perfect Synergy Found!</h2>
+        </div>
+
+        <div class="row align-items-center mb-4">
+            <div class="col-md-4">
+                <div class="avatar-circle">YOU</div>
+                <h5 class="mb-0 text-truncate">{{ me.student_roll }}</h5>
+                <small class="text-secondary">Current User</small>
+            </div>
+
+            <div class="col-md-4">
+                <div class="synergy-badge">{{ synergy }}%</div>
+                <div class="small text-uppercase text-secondary">Synergy Score</div>
+                <div class="mt-2">
+                    <i class="bi bi-link-45deg fs-2 text-primary"></i>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="avatar-circle" style="border-color: #10b981;">{{ buddy.student_roll[:2] | upper }}</div>
+                <h5 class="mb-0 text-truncate">{{ buddy.student_roll }}</h5>
+                <small class="text-secondary">Recommended Buddy</small>
+            </div>
+        </div>
+
+        <hr style="border-color: rgba(255,255,255,0.1);">
+
+        <div class="mt-4">
+            <h4 class="mb-4"><i class="bi bi-intersect me-2 text-info"></i>Skill Gap Analysis</h4>
+            <div style="height: 350px;">
+                <canvas id="synergyChart"></canvas>
+            </div>
+            <p class="mt-4 text-secondary small">
+                The AI suggests this pair because your strengths (blue) fill their weaknesses (green), 
+                and vice-versa. Study together to stabilize both your "Ghost Twins."
+            </p>
+        </div>
+    </div>
+
+    <div class="text-center">
+        <a href="/student_portal" class="btn btn-outline-light px-4 me-2">Back to Portal</a>
+        <button onclick="window.print()" class="btn btn-primary px-4">Download Study Plan</button>
+    </div>
+
+</div>
+
+<script>
+    const ctx = document.getElementById('synergyChart');
+    
+    // Skill data from Flask
+    const myData = [{{ me.attendance }}, {{ me.internal }}, {{ me.assignment }}, {{ me.quiz }}];
+    const buddyData = [{{ buddy.attendance }}, {{ buddy.internal }}, {{ buddy.assignment }}, {{ buddy.quiz }}];
+
+    new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: ['Attendance', 'Internals', 'Assignments', 'Quizzes'],
+            datasets: [{
+                label: 'Your Stats',
+                data: myData,
+                fill: true,
+                backgroundColor: 'rgba(212, 212, 212, 0.2)',
+                borderColor: '#3b82f6',
+                pointBackgroundColor: '#3b82f6',
+            }, {
+                label: 'Buddy Stats',
+                data: buddyData,
+                fill: true,
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                borderColor: '#10b981',
+                pointBackgroundColor: '#10b981',
+            }]
+        },
+        options: {
+            scales: {
+                r: {
+                    angleLines: { color: '#374151' },
+                    grid: { color: '#374151' },
+                    pointLabels: { color: '#ffffff', font: { size: 14 } },
+                    ticks: { display: false, max: 100, min: 0 }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: '#ffffff' } }
+            }
+        }
+    });
+</script>
+{% endblock %}

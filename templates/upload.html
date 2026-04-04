@@ -1,30 +1,170 @@
 {% extends "base.html" %}
-{% block title %}Bulk Upload - EduPredict{% endblock %}
+{% block title %}Bulk Upload — EduPredict{% endblock %}
 
 {% block extra_css %}
 <style>
-    .upload-box { border: 2px dashed #0056b3; padding: 40px; text-align: center; border-radius: 8px; background-color: #f8f9fa; }
-    input[type="file"] { margin: 20px 0; }
-    button { padding: 12px 20px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-    .format-guide { text-align: left; font-size: 14px; color: #555; margin-top: 20px; background: #eee; padding: 10px; }
+    .upload-layout {
+        max-width: 580px;
+        margin: 0 auto;
+        padding: 32px 0 60px;
+    }
+    .upload-card {
+        background: var(--ink-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+    .upload-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 10px;
+    }
+    .upload-body { padding: 28px; }
+    .dropzone {
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-lg);
+        padding: 48px 24px;
+        text-align: center;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        margin-bottom: 24px;
+    }
+    .dropzone:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .dropzone:hover .drop-icon { color: var(--accent); }
+    .drop-icon { font-size: 2.8rem; color: var(--text-dim); display: block; margin-bottom: 14px; transition: color 0.2s ease; }
+    .dropzone h5 { font-size: 1rem; margin-bottom: 6px; }
+    .dropzone input[type="file"] {
+        background: var(--ink-3);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: var(--radius);
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        width: 100%;
+        margin-top: 16px;
+        cursor: pointer;
+    }
+    .spec-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+        margin-top: 4px;
+    }
+    .spec-table th {
+        background: var(--ink-3);
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+    }
+    .spec-table td {
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-muted);
+        vertical-align: middle;
+    }
+    .spec-table td:first-child {
+        font-family: 'DM Mono', monospace;
+        font-size: 0.8rem;
+        color: var(--accent);
+    }
+    .spec-table tr:last-child td { border-bottom: none; }
+    .btn-upload {
+        background: var(--green);
+        color: var(--ink);
+        font-weight: 700;
+        font-size: 0.9rem;
+        padding: 13px;
+        width: 100%;
+        border: none;
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .btn-upload:hover {
+        background: #86efac;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(74,222,128,0.25);
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container" style="width: 500px;">
-    <h2>Bulk Upload & Grade Calculation</h2>
-    <div class="upload-box">
-        <form action="/upload_csv" method="POST" enctype="multipart/form-data">
-            <input type="file" name="file" accept=".csv" required>
-            <br>
-            <button type="submit">Upload and Process Grades</button>
-        </form>
+<div class="upload-layout">
+
+    <div style="padding-bottom: 20px;">
+        <p class="text-muted mb-1" style="font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600;">Batch Processing</p>
+        <h2 style="margin: 0; font-size: 1.7rem;">Bulk CSV Upload</h2>
     </div>
-    
-    <div class="format-guide">
-        <strong>Required CSV Format (Include headers):</strong><br>
-        <code>student_username, attendance, internal, assignment, quiz</code><br><br>
-        <em>Note: The system will automatically calculate total scores, class averages, apply your S-F grading curve, and publish reports to the Student Portals.</em>
+
+    <div class="upload-card">
+        <div class="upload-header">
+            <i class="bi bi-file-earmark-spreadsheet" style="color: var(--green);"></i>
+            <span style="font-size: 0.9rem; font-weight: 600;">Upload Class Data</span>
+        </div>
+        <div class="upload-body">
+            <form action="/upload_csv" method="POST" enctype="multipart/form-data">
+                <div class="dropzone">
+                    <i class="bi bi-cloud-arrow-up drop-icon"></i>
+                    <h5>Drop your CSV here</h5>
+                    <p class="text-muted mb-0" style="font-size: 0.82rem;">Predictions, grades, and risk scores will be published instantly to student portals</p>
+                    <input type="file" name="file" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn-upload">
+                    <i class="bi bi-play-circle me-2"></i> Process Entire Class
+                </button>
+            </form>
+        </div>
     </div>
+
+    <div class="upload-card">
+        <div class="upload-header">
+            <i class="bi bi-code-square" style="color: var(--text-muted);"></i>
+            <span style="font-size: 0.875rem; font-weight: 600; color: var(--text-muted);">Required CSV Format</span>
+        </div>
+        <div style="padding: 0;">
+            <table class="spec-table">
+                <thead>
+                    <tr>
+                        <th>Column Name</th>
+                        <th>Type</th>
+                        <th>Range</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>student_roll</td>
+                        <td>Text / ID</td>
+                        <td>Any string</td>
+                    </tr>
+                    <tr>
+                        <td>attendance</td>
+                        <td>Float</td>
+                        <td>0 – 100</td>
+                    </tr>
+                    <tr>
+                        <td>cat1</td>
+                        <td>Float</td>
+                        <td>0 – 50</td>
+                    </tr>
+                    <tr>
+                        <td>cat2</td>
+                        <td>Float</td>
+                        <td>0 – 50</td>
+                    </tr>
+                    <tr>
+                        <td>assignment_quiz</td>
+                        <td>Float</td>
+                        <td>0 – 30</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
 </div>
 {% endblock %}

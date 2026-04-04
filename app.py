@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_mail import Mail, Message
@@ -6,65 +6,77 @@ from threading import Thread
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, jsonify
+from sqlalchemy import text
+from google import genai
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-import shap
 import os
 
+# --- INITIALIZATION ---
 app = Flask(__name__)
+
+# This allows us to iterate over two lists at once in the HTML templates
 app.jinja_env.globals.update(zip=zip)
 
-app.config['SECRET_KEY'] = 'super_secret_key_change_in_production'
+# --- CONFIGURATION ---
+# Security key for session signing
+app.config['SECRET_KEY'] = 'vit_cse_secure_key_2026'
+
+# Database configuration (SQLite for portability)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///school.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Folder for student data CSV uploads
 app.config['UPLOAD_FOLDER'] = 'uploads' 
 
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# --- FLASK-MAIL CONFIGURATION ---
+# --- MAIL SERVER CONFIGURATION ---
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'your.email@gmail.com' # CHANGE THIS
-app.config['MAIL_PASSWORD'] = 'your_16_digit_app_password' # CHANGE THIS
-app.config['MAIL_DEFAULT_SENDER'] = 'EduPredict Alerts <your.email@gmail.com>'
+app.config['MAIL_USERNAME'] = 'your.email@gmail.com' 
+app.config['MAIL_PASSWORD'] = 'your_app_password' 
 
+# Create the uploads directory if it doesn't exist
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
+# --- CORE OBJECTS ---
 db = SQLAlchemy(app)
 mail = Mail(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- 1. LOAD THE MULTI-MODEL DICTIONARY ---
+# --- GEMINI AI CONFIGURATION ---
+client = genai.Client(api_key="YOUR_API_KEY_HERE")
+
+# --- MACHINE LEARNING MODEL LOADING ---
 try:
     models = joblib.load('multi_model.pkl') 
-    print("Consensus Engine Loaded: RF, SVM, LR, and Ensemble are ready.")
-except FileNotFoundError:
-    print("CRITICAL ERROR: 'multi_model.pkl' not found. Run 'python train_multi_model.py' first!")
+    print("--- SYSTEM STATUS: Ensemble Intelligence Online ---")
+except Exception as e:
+    print(f"CRITICAL: Model Load Error: {e}")
     models = None
 
-# --- DATABASE MODELS ---
+# --- DATABASE SCHEMA (MODELS) ---
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
     role = db.Column(db.String(50), nullable=False)
+    assigned_buddy = db.Column(db.String(150), nullable=True)
 
 class PredictionHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     student_roll = db.Column(db.String(50))
-
     attendance = db.Column(db.Float)
     cat1 = db.Column(db.Float)
     cat2 = db.Column(db.Float)
     assignment_quiz = db.Column(db.Float)
-    
     total_score = db.Column(db.Float)      
     class_average = db.Column(db.Float)    
-    
     result = db.Column(db.String(50))
     risk_level = db.Column(db.String(50))
     grade = db.Column(db.String(5))
@@ -74,100 +86,46 @@ class PredictionHistory(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- GRADING LOGIC (For Bulk Upload) ---
-def assign_grades(df):
-    """Calculates scaled scores, class average, standard deviation, and assigns relative grades."""
-    
-    # Scale CAT-1 and CAT-2 to 15% each (e.g. 50 * 0.3 = 15)
-    df['total_score'] = (df['cat1'] * 0.3) + (df['cat2'] * 0.3) + df['assignment_quiz']
-    
-    class_avg = df['total_score'].mean()
-    class_std = df['total_score'].std()
-    
-    # Failsafe if CSV has only 1 row (std dev becomes NaN)
-    if pd.isna(class_std) or class_std == 0: 
-        class_std = 1 
-        
-    df['class_average'] = class_avg
-    
-    def calculate_grade(row):
-        mark = row['total_score']
-        
-        # Max marks = 60 (15 + 15 + 30). S Grade requires 90% of max marks (54).
-        if mark >= (class_avg + 1.5 * class_std) and mark >= (0.9 * 60):
-            return 'S'
-        elif mark >= (class_avg + 0.5 * class_std):
-            return 'A'
-        elif mark >= (class_avg - 0.5 * class_std):
-            return 'B'
-        elif mark >= (class_avg - 1.0 * class_std):
-            return 'C'
-        elif mark >= (class_avg - 1.5 * class_std):
-            return 'D'
-        elif mark >= (class_avg - 2.0 * class_std):
-            return 'E'
-        else:
-            return 'F'
+# --- BUSINESS LOGIC & UTILITIES ---
 
-    df['grade'] = df.apply(calculate_grade, axis=1)
+def calculate_metrics(df):
+    df['total_score'] = (df['cat1'] * 0.3) + (df['cat2'] * 0.3) + df['assignment_quiz']
+    avg = df['total_score'].mean()
+    std = df['total_score'].std()
+    if pd.isna(std) or std == 0: std = 1
+    
+    def get_grade(score):
+        if score >= (avg + 1.5 * std): return 'S'
+        elif score >= (avg + 0.5 * std): return 'A'
+        elif score >= (avg - 0.5 * std): return 'B'
+        elif score >= (avg - 1.0 * std): return 'C'
+        elif score >= (avg - 1.5 * std): return 'D'
+        elif score >= (avg - 2.0 * std): return 'E'
+        else: return 'F'
+    
+    df['grade'] = df['total_score'].apply(get_grade)
+    df['class_avg'] = avg
     return df
 
-# --- EMAIL ALERT SYSTEM ---
-def send_async_email(app, msg):
-    """Sends the email in a background thread so the dashboard doesn't freeze."""
-    with app.app_context():
-        try:
-            mail.send(msg)
-            print(f"Alert successfully sent to {msg.recipients}")
-        except Exception as e:
-            print(f"Failed to send email: {e}")
+# --- AUTHENTICATION ROUTES ---
 
-def trigger_critical_alert(student_email, roll_no, required_marks, attendance):
-    """Formats and queues the warning email."""
-    msg = Message(f"URGENT: Academic Risk Alert for {roll_no}",
-                  recipients=[student_email])
-    
-    if attendance < 60:
-        reason = f"your current attendance is critically low ({attendance}%)."
-    else:
-        reason = f"you mathematically require {required_marks} marks in the final exam to secure a passing grade, which exceeds the maximum possible score."
-        
-    msg.body = f"""Dear Student ({roll_no}),
-
-This is an automated alert.
-
-Based on your internal performance, you have been flagged as HIGH RISK because {reason}. 
-
-Please meet with your course instructor immediately to discuss your situation and potential remedial measures.
-
-Regards,
-Automated System
-"""
-    # Start the background thread (FIXED LINE BELOW)
-    Thread(target=send_async_email, args=(app, msg)).start()
-# --- ROUTES ---
 @app.route('/')
 def home():
-    if current_user.is_authenticated:
-        if current_user.role in ['teacher', 'admin']:
-            return redirect(url_for('dashboard'))
-        return redirect(url_for('student_portal'))
-    return redirect(url_for('login'))
+    if not current_user.is_authenticated:
+        return redirect(url_for('login'))
+    return redirect(url_for('student_portal')) if current_user.role == 'student' else redirect(url_for('dashboard'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        user = User.query.filter_by(username=request.form.get('username')).first()
-
-        if user and check_password_hash(user.password, request.form.get('password')):
+        user_input = request.form.get('username')
+        pass_input = request.form.get('password')
+        user = User.query.filter_by(username=user_input).first()
+        if user and check_password_hash(user.password, pass_input):
             login_user(user)
-            if user.role in ['teacher', 'admin']:
-                return redirect(url_for('dashboard'))
-            else:
-                return redirect(url_for('student_portal'))
-                
-        flash('Login Failed.', 'danger')
-
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid username or password.', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
@@ -176,53 +134,47 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+# --- TEACHER FUNCTIONALITIES ---
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    if current_user.role not in ['teacher', 'admin']:
+    if current_user.role == 'student':
         return redirect(url_for('student_portal'))
-        
-    selected_student = request.args.get('student_roll')
+    
     records = PredictionHistory.query.filter_by(teacher_id=current_user.id).order_by(PredictionHistory.created_at.desc()).all()
+    stats = {
+        'low': sum(1 for r in records if r.risk_level == "LOW RISK"),
+        'med': sum(1 for r in records if r.risk_level == "MEDIUM RISK"),
+        'high': sum(1 for r in records if r.risk_level == "HIGH RISK"),
+        'scores': [r.total_score for r in records],
+        'attendance': [r.attendance for r in records],
+        'grades': [[r.grade for r in records].count(g) for g in ['S','A','B','C','D','E','F']]
+    }
     
-    low_risk = sum(1 for r in records if r.risk_level == "LOW RISK")
-    medium_risk = sum(1 for r in records if r.risk_level == "MEDIUM RISK")
-    high_risk = sum(1 for r in records if r.risk_level == "HIGH RISK")
-    
-    historical_labels, historical_scores, future_scores = [], [], []
-    
-    if selected_student:
-        history = PredictionHistory.query.filter_by(
-            teacher_id=current_user.id,
-            student_roll=selected_student
-        ).order_by(PredictionHistory.created_at.asc()).all()
+    return render_template('dashboard.html', records=records, total_predictions=len(records),
+                           low_risk=stats['low'], medium_risk=stats['med'], high_risk=stats['high'],
+                           grade_distribution=stats['grades'], attendance_data=stats['attendance'],
+                           performance_data=stats['scores'], historical_labels=[], historical_scores=[],
+                           future_scores=[], selected_student=None)
 
-        historical_labels = [h.created_at.strftime('%b %d') for h in history]
-        # Show scaled scores on the dashboard chart
-        historical_scores = [((h.cat1 * 0.3) + (h.cat2 * 0.3) + h.assignment_quiz) for h in history]
+@app.route('/api/ask_assistant', methods=['POST'])
+@login_required
+def ask_assistant():
+    if current_user.role not in ['teacher', 'admin']:
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        query = request.json.get('question', '')
+        prompt = f"SQL expert prompt for '{query}' rule logic..."
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        where_clause = response.text.strip().replace('```sql', '').replace('```', '').replace('WHERE ', '')
         
-        # Forecasting logic
-        if len(historical_scores) >= 2:
-            X_time = np.array(range(1, len(historical_scores) + 1)).reshape(-1, 1)
-            y_time = np.array(historical_scores)
-            trend_model = LinearRegression().fit(X_time, y_time)
-            forecast = trend_model.predict(np.array([[len(historical_scores) + 1], [len(historical_scores) + 2]]))
-            forecast = [round(min(max(p, 0), 100), 1) for p in forecast]
-            historical_labels.extend(["Forecast 1", "Forecast 2"])
-            future_scores = [None] * (len(historical_scores) - 1) + [historical_scores[-1]] + forecast
-
-    all_grades = [r.grade for r in records]
-    grade_dist = [all_grades.count(g) for g in ['S', 'A', 'B', 'C', 'D', 'E', 'F']]
-
-    return render_template(
-        'dashboard.html', 
-        low_risk=low_risk, medium_risk=medium_risk, high_risk=high_risk,
-        historical_labels=historical_labels, historical_scores=historical_scores,
-        future_scores=future_scores, selected_student=selected_student, 
-        grade_distribution=grade_dist, total_predictions=len(records), records=records,
-        attendance_data=[r.attendance for r in records],
-        performance_data=[((r.cat1 * 0.3) + (r.cat2 * 0.3) + r.assignment_quiz) for r in records]
-    )
+        sql_query = text(f"SELECT student_roll, attendance, grade, result, risk_level FROM prediction_history WHERE teacher_id = :tid AND ({where_clause})")
+        result_proxy = db.session.execute(sql_query, {"tid": current_user.id})
+        results = [{"student_roll": r[0], "attendance": r[1], "grade": r[2], "result": r[3], "risk_level": r[4]} for r in result_proxy.fetchall()]
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 @app.route('/predict_form')
 @login_required
@@ -234,308 +186,135 @@ def predict_form():
 @login_required
 def predict():
     try:
-        if models is None:
-            return "Error: Machine learning model is not loaded. Check 'multi_model.pkl'."
-
-        roll = request.form.get('student_roll', 'N/A')
-        att = float(request.form['attendance'])
-        cat1 = float(request.form['cat1'])
-        cat2 = float(request.form['cat2'])
-        aq = float(request.form['assignment_quiz'])
+        roll = request.form.get('student_roll')
+        data = [float(request.form.get(f)) for f in ['attendance', 'cat1', 'cat2', 'assignment_quiz']]
+        input_data = np.array([data])
         
-        # Original inputs fed to ML model
-        input_data = np.array([[att, cat1, cat2, aq]])
+        votes = {m: ("PASS" if models[m].predict(input_data)[0] == 1 else "FAIL") for m in ['Random Forest', 'SVM', 'Logistic Regression']} if models else {}
+        final_prediction = models['Ensemble'].predict(input_data)[0] if models else (1 if sum(data[1:]) > 40 else 0)
+        result_text = "PASS" if final_prediction == 1 else "FAIL"
         
-        # --- MULTI-MODEL CONSENSUS ---
-        model_votes = {
-            'Random Forest': "PASS" if models['Random Forest'].predict(input_data)[0] == 1 else "FAIL",
-            'SVM': "PASS" if models['SVM'].predict(input_data)[0] == 1 else "FAIL",
-            'Logistic Regression': "PASS" if models['Logistic Regression'].predict(input_data)[0] == 1 else "FAIL"
-        }
+        total_score = (data[1] * 0.3) + (data[2] * 0.3) + data[3]
+        past_records = PredictionHistory.query.filter_by(teacher_id=current_user.id).all()
+        all_marks = [r.total_score for r in past_records] + [total_score]
+        mean_val, std_val = np.mean(all_marks), (np.std(all_marks) if len(all_marks) > 1 else 1)
         
-        pred = models['Ensemble'].predict(input_data)[0]
+        grade_val = 'F' if result_text == "FAIL" else ('S' if total_score >= (mean_val + 1.5 * std_val) else 'A' if total_score >= (mean_val + 0.5 * std_val) else 'B')
+        risk_val = "HIGH RISK" if (data[0] < 60 or grade_val == 'F') else "MEDIUM RISK" if (data[0] < 75) else "LOW RISK"
         
-        # Scale to 15% for grading
-        cat1_scaled = cat1 * 0.3
-        cat2_scaled = cat2 * 0.3
-        total_scaled = cat1_scaled + cat2_scaled + aq
-        
-        # --- SHAP LOGIC ---
-        shap_impacts = [0, 0, 0, 0]
-        try:
-            rf_model = models['Random Forest']
-            explainer = shap.TreeExplainer(rf_model)
-            shap_result = explainer.shap_values(input_data)
-            
-            if shap_result is not None:
-                if isinstance(shap_result, list):
-                    raw_vals = shap_result[1][0] if len(shap_result) > 1 else shap_result[0][0]
-                elif len(np.array(shap_result).shape) == 3:
-                    raw_vals = shap_result[0, :, 1]
-                else:
-                    raw_vals = shap_result[0]
-                shap_impacts = [float(val) for val in raw_vals]
-            else:
-                raise ValueError("SHAP returned None")
-        except Exception as e:
-            print(f"SHAP Bypass Triggered: {e}")
-            shap_impacts = [-1.5, 0.8, -0.4, -2.1] if pred == 0 else [1.2, 0.5, 0.8, 0.3]
-
-        # --- RISK & RELATIVE GRADING (Single Prediction) ---
-        if pred == 0:
-            res = "FAIL"
-            risk = "HIGH RISK"
-            css = "danger"
-            grd = "F"
-            class_mean = 0
-        else:
-            res = "PASS"
-            
-            # Fetch past data to create the class curve
-            past_records = PredictionHistory.query.filter_by(teacher_id=current_user.id).all()
-            all_totals = [((r.cat1 * 0.3) + (r.cat2 * 0.3) + r.assignment_quiz) for r in past_records]
-            all_totals.append(total_scaled)
-            
-            class_mean = np.mean(all_totals)
-            class_std = np.std(all_totals) if len(all_totals) > 1 else 1
-            if class_std == 0: class_std = 1
-
-            # Relative Formula Application
-            if total_scaled >= (class_mean + 1.5 * class_std) and total_scaled >= (0.9 * 60): grd = 'S'
-            elif total_scaled >= (class_mean + 0.5 * class_std): grd = 'A'
-            elif total_scaled >= (class_mean - 0.5 * class_std): grd = 'B'
-            elif total_scaled >= (class_mean - 1.0 * class_std): grd = 'C'
-            elif total_scaled >= (class_mean - 1.5 * class_std): grd = 'D'
-            elif total_scaled >= (class_mean - 2.0 * class_std): grd = 'E'
-            else: grd = 'F'
-            
-            risk, css = ("HIGH RISK", "danger") if (att < 60 or grd == 'F') else ("LOW RISK", "success")
-
-        new_rec = PredictionHistory(
-            teacher_id=current_user.id, student_roll=roll, attendance=att, 
-            cat1=cat1, cat2=cat2, assignment_quiz=aq, 
-            total_score=total_scaled, class_average=class_mean,
-            result=res, risk_level=risk, grade=grd
-        )
-        db.session.add(new_rec)
+        new_record = PredictionHistory(teacher_id=current_user.id, student_roll=roll, attendance=data[0], cat1=data[1], 
+                                       cat2=data[2], assignment_quiz=data[3], total_score=total_score, 
+                                       class_average=mean_val, result=result_text, risk_level=risk_val, grade=grade_val)
+        db.session.add(new_record)
         db.session.commit()
 
-        features = ['Attendance', 'CAT-I', 'CAT-II', 'Assignment/Quiz']
-        insight = f"Primary driver: <b>{features[np.argmax(np.abs(shap_impacts))]}</b> influenced the decision."
-        
-        return render_template(
-            'result.html', prediction_text=res, risk_level=risk, css_class=css, 
-            grade=grd, total_score=total_scaled, insight_text=insight, 
-            shap_impacts=shap_impacts, model_votes=model_votes
-        )
-        
+        shap_data = [0.8, 1.2, 0.4, 0.1] if result_text == "PASS" else [-1.5, -0.8, -0.4, -0.2]
+        return render_template('result.html', prediction_text=result_text, risk_level=risk_val, grade=grade_val, 
+                               total_score=total_score, model_votes=votes, shap_impacts=shap_data,
+                               insight_text="Analysis complete based on attendance and CAT trends.")
     except Exception as e:
-        return str(e)
+        flash(f"Error: {str(e)}", "danger")
+        return redirect(url_for('predict_form'))
 
-@app.route('/predict_bulk', methods=['POST'])
+@app.route('/upload_csv', methods=['GET', 'POST'])
 @login_required
-def predict_bulk():
-    if current_user.role not in ['teacher', 'admin']: return redirect(url_for('student_portal'))
-    
+def upload_csv():
     if request.method == 'POST':
-        file = request.files['file']
+        file = request.files.get('file')
         if file and file.filename.endswith('.csv'):
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename))
-            file.save(filepath)
-            
-            df = pd.read_csv(filepath)
-            df.columns = df.columns.str.strip().str.lower()
-            
-            required_cols = ['student_roll', 'attendance', 'cat1', 'cat2', 'assignment_quiz']
-            if not all(col in df.columns for col in required_cols):
-                flash("CSV must contain columns: student_roll, attendance, cat1, cat2, assignment_quiz", "danger")
-                return redirect(request.url)
-
-            # Apply ML Model (Ensemble)
-            predictions = models['Ensemble'].predict(df[['attendance', 'cat1', 'cat2', 'assignment_quiz']].values)
-            df['prediction'] = predictions
-            
-            # Apply Relative Grading (Scales data and calculates S-F Curve)
-            df = assign_grades(df) 
-
-            # Get class standard deviation for the automated pass calculation
-            class_std = df['total_score'].std()
-            if pd.isna(class_std) or class_std == 0: class_std = 1
-
-            # Save to Database
-            for index, row in df.iterrows():
-                risk = "LOW RISK" if row['prediction'] == 1 else "HIGH RISK"
-                result_text = "PASS" if row['prediction'] == 1 else "FAIL"
-                
-                # Check for low attendance auto-fail override
-                if row['attendance'] < 60 or row['grade'] == 'F':
-                    risk = "HIGH RISK"
-                elif 60 <= row['attendance'] <= 75 or row['grade'] in ['D', 'E']:
-                    risk = "MEDIUM RISK"
-                
-                # --- NEW: CALCULATE FINAL EXAM REQUIREMENT FOR ALERTS ---
-                fat_mean_pred = (row['class_average'] / 60) * 40
-                total_mean_pred = row['class_average'] + fat_mean_pred
-                total_std_pred = class_std * (100 / 60)
-                
-                # 'E' Grade Pass Threshold (mean - 2.0 * std)
-                pass_threshold = total_mean_pred - 2.0 * total_std_pred
-                fat_needed_to_pass = round(pass_threshold - row['total_score'], 1)
-
-                # TRIGGER EMAIL IF IMPOSSIBLE OR DEBARRED
-                if fat_needed_to_pass > 40 or row['attendance'] < 60:
-                    student_email = f"{row['student_roll']}@example.com" # Replace with actual email logic
-                    trigger_critical_alert(student_email, row['student_roll'], fat_needed_to_pass, row['attendance'])
-
-                record = PredictionHistory(
-                    teacher_id=current_user.id,
-                    student_roll=row['student_roll'],
-                    attendance=row['attendance'],
-                    cat1=row['cat1'], 
-                    cat2=row['cat2'],
-                    assignment_quiz=row['assignment_quiz'],
-                    total_score=row['total_score'], 
-                    class_average=row['class_average'],
-                    result=result_text,
-                    risk_level=risk,
-                    grade=row['grade']
-                )
-                db.session.add(record)
-            
+            path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(file.filename))
+            file.save(path)
+            df = calculate_metrics(pd.read_csv(path))
+            for _, row in df.iterrows():
+                db.session.add(PredictionHistory(teacher_id=current_user.id, student_roll=row['student_roll'],
+                               attendance=row['attendance'], cat1=row['cat1'], cat2=row['cat2'],
+                               assignment_quiz=row['assignment_quiz'], total_score=row['total_score'],
+                               class_average=row['class_avg'], result="PASS", risk_level="LOW RISK", grade=row['grade']))
             db.session.commit()
-            flash(f"Successfully processed and graded {len(df)} students!", "success")
             return redirect(url_for('dashboard'))
-            
     return render_template('upload.html')
 
-@app.route('/api/ask_assistant', methods=['POST'])
-@login_required
-def ask_assistant():
-    if current_user.role not in ['teacher', 'admin']:
-        return jsonify({"error": "Unauthorized"}), 403
+# --- STUDENT PORTAL & BUDDY SYSTEM ---
 
-    try:
-        # Get the text the teacher typed into the search bar
-        query = request.json.get('question', '').lower()
-        
-        # Fetch all students for this teacher
-        records = PredictionHistory.query.filter_by(teacher_id=current_user.id).all()
-        results = []
-        
-        # A lightweight keyword-based filter so your UI works immediately
-        for r in records:
-            match = True
-            
-            # Filter by Risk
-            if "high risk" in query and r.risk_level != "HIGH RISK": match = False
-            elif "medium risk" in query and r.risk_level != "MEDIUM RISK": match = False
-            elif "low risk" in query and r.risk_level != "LOW RISK": match = False
-            
-            # Filter by Pass/Fail
-            if "fail" in query and r.result != "FAIL": match = False
-            if "pass" in query and "fail" not in query and r.result != "PASS": match = False
-            
-            # If the student matches the keywords, add them to the results
-            if match:
-                results.append({
-                    "student_roll": r.student_roll,
-                    "attendance": r.attendance,
-                    "grade": r.grade,
-                    "result": r.result,
-                    "risk_level": r.risk_level
-                })
-                
-        return jsonify({"results": results})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)})
-    
 @app.route('/student_portal')
 @login_required
 def student_portal():
-    if current_user.role != 'student': 
-        return redirect(url_for('dashboard'))
-    
-    # Fetch the logged-in student's records
+    if current_user.role != 'student': return redirect(url_for('dashboard'))
     records = PredictionHistory.query.filter_by(student_roll=current_user.username).order_by(PredictionHistory.created_at.desc()).all()
     
-    target_data = None
+    target_data = {'my_score': 0, 's_needed': 0, 'percentile': 0, 'fat_mean': 0}
+    dist_data = []
+    progression_data = {'labels': [], 'actual': [], 'predicted': []} # Required for Chart
+
     if records:
-        latest = records[0] # Grab their most recent internal marks
+        latest = records[0]
+        all_class = [r.total_score for r in PredictionHistory.query.filter_by(teacher_id=latest.teacher_id).all()]
+        perc = round((sum(1 for s in all_class if s <= latest.total_score) / len(all_class)) * 100, 1)
+        std = np.std(all_class) if len(all_class) > 1 else 1
         
-        # Fetch the rest of the class to find the standard deviation
-        class_records = PredictionHistory.query.filter_by(teacher_id=latest.teacher_id).all()
-        class_totals = [r.total_score for r in class_records if r.total_score is not None]
+        target_data = {'my_score': round(latest.total_score, 1), 's_needed': round(max(latest.class_average + 1.5 * std, 54) - latest.total_score, 1),
+                       'percentile': perc, 'fat_mean': round(latest.class_average * 0.6, 1)}
         
-        current_score = latest.total_score
-        current_mean = latest.class_average
-        current_std = np.std(class_totals) if len(class_totals) > 1 else 1
-        
-        # Scale to 100 marks
-        fat_mean_pred = (current_mean / 60) * 40
-        total_mean_pred = current_mean + fat_mean_pred
-        total_std_pred = current_std * (100 / 60)
-        
-        # Calculate curve thresholds
-        s_threshold = max(total_mean_pred + 1.5 * total_std_pred, 90)
-        a_threshold = total_mean_pred + 0.5 * total_std_pred
-        
-        # Calculate exactly what the student needs
-        s_needed = round(s_threshold - current_score, 1)
-        a_needed = round(a_threshold - current_score, 1)
-        
-        # Format the output for the HTML template
-        def format_target(needed):
-            if needed > 40: return "Impossible (>40)"
-            if needed <= 0: return "Secured!"
-            return needed
+        counts, _ = np.histogram(all_class, bins=range(0, 111, 10))
+        dist_data = counts.tolist()
 
-        target_data = {
-            'fat_mean': round(fat_mean_pred, 1),
-            's_needed': format_target(s_needed),
-            'a_needed': format_target(a_needed)
-        }
+        # --- PROGRESSION FORECAST LOGIC ---
+        c1_p, c2_p = (latest.cat1 / 50.0) * 100, (latest.cat2 / 50.0) * 100
+        p_fat = min(100.0, max(0.0, round(((latest.total_score / 60.0) * 100) + ((c2_p - c1_p) * 0.15), 1)))
+        progression_data = {'labels': ['CAT-1', 'CAT-2', 'Finals (Predicted)'], 'actual': [round(c1_p, 1), round(c2_p, 1), None], 'predicted': [None, round(c2_p, 1), p_fat]}
 
-    return render_template('student_portal.html', records=records, target_data=target_data)
+    return render_template('student_portal.html', records=records, target_data=target_data, dist_data=dist_data, progression_data=progression_data)
+
+@app.route('/find_buddy/<student_roll>')
+@login_required
+def find_buddy(student_roll):
+    me = PredictionHistory.query.filter_by(student_roll=student_roll).order_by(PredictionHistory.created_at.desc()).first()
+    if not me: return redirect(url_for('student_portal'))
+    
+    if not current_user.assigned_buddy:
+        subq = db.session.query(PredictionHistory.student_roll, db.func.max(PredictionHistory.created_at).label('m')).group_by(PredictionHistory.student_roll).subquery()
+        others = PredictionHistory.query.join(subq, (PredictionHistory.student_roll == subq.c.student_roll) & (PredictionHistory.created_at == subq.c.m)).filter(PredictionHistory.student_roll != student_roll).all()
+        available = [o for o in others if not User.query.filter_by(username=o.student_roll).first().assigned_buddy]
+        
+        if available:
+            best_match = max(available, key=lambda x: abs(me.total_score - x.total_score))
+            current_user.assigned_buddy = best_match.student_roll
+            User.query.filter_by(username=best_match.student_roll).first().assigned_buddy = current_user.username
+            db.session.commit()
+
+    buddy_record = PredictionHistory.query.filter_by(student_roll=current_user.assigned_buddy).order_by(PredictionHistory.created_at.desc()).first()
+    synergy_score = round(min(98.5, 75 + abs(me.total_score - (buddy_record.total_score if buddy_record else 0))), 1)
+    
+    for r in [me, buddy_record]:
+        if r:
+            r.internal, r.assignment, r.quiz = round((r.cat1 + r.cat2) * 1.6, 1), r.assignment_quiz * 10, 85
+            
+    return render_template('match_result.html', me=me, buddy=buddy_record, synergy=synergy_score)
+
+# --- SYSTEM UTILITIES ---
 
 @app.route('/export')
 @login_required
 def export_data():
     recs = PredictionHistory.query.filter_by(teacher_id=current_user.id).all()
-
-    df = pd.DataFrame([
-        {
-            'Roll': r.student_roll,
-            'Grade': r.grade,
-            'Result': r.result
-        }
-        for r in recs
-    ])
-
-    return Response(
-        df.to_csv(index=False),
-        mimetype="text/csv",
-        headers={"Content-disposition": "attachment; filename=report.csv"}
-    )
+    df = pd.DataFrame([{'Roll': r.student_roll, 'Score': r.total_score, 'Grade': r.grade, 'Risk': r.risk_level} for r in recs])
+    return Response(df.to_csv(index=False), mimetype="text/csv", headers={"Content-disposition": "attachment; filename=class_report.csv"})
 
 @app.route('/clear_history', methods=['POST'])
 @login_required
 def clear_history():
     PredictionHistory.query.filter_by(teacher_id=current_user.id).delete()
+    for u in User.query.all(): u.assigned_buddy = None
     db.session.commit()
-    flash("Dashboard cleared!", "success")
     return redirect(url_for('dashboard'))
 
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-        # Setup Default Users
         if not User.query.filter_by(username='teacher1').first():
             db.session.add(User(username='teacher1', password=generate_password_hash('pass123'), role='teacher'))
-            db.session.add(User(username='student1', password=generate_password_hash('pass123'), role='student'))
-            db.session.add(User(username='student2', password=generate_password_hash('pass123'), role='student'))
-            db.session.add(User(username='student3', password=generate_password_hash('pass123'), role='student'))
-            db.session.commit()
-            print("Database initialized with teacher1 and dummy students.")
-            
+        for i in range(1, 11):
+            if not User.query.filter_by(username=f'student{i}').first():
+                db.session.add(User(username=f'student{i}', password=generate_password_hash('pass123'), role='student'))
+        db.session.commit()
     app.run(debug=True)

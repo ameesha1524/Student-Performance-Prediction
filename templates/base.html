@@ -9,45 +9,72 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     
     <style>
-        /* THE ORIGINAL OBSIDIAN DARK MODE */
+        /* 1. Deep Cyber Mesh Background (Dark but refracts through glass) */
         body {
-            background-color: #111827; /* Deep Obsidian */
+            background: linear-gradient(135deg, #181818 0%, #201f21 50%, #282629 100%);
+            background-attachment: fixed; 
             color: #ffffff;
             font-family: 'Inter', -apple-system, sans-serif;
         }
 
-        .bg-dark-panel {
-            background-color: #1f2937 !important; /* Slate Grey */
-            border: 1px solid #374151 !important; /* Zinc Border */
+        /* 2. THE CORE GLASS EFFECT */
+        .bg-dark-panel, .card, .prediction-card, .match-card, .verdict-card, .upload-card {
+            background: rgba(255, 255, 255, 0.03) !important; /* Ultra-sheer tint */
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.08) !important; /* Frosty edge */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+            border-radius: 16px !important; 
         }
 
-        /* Original Logic Accents */
-        .text-success { color: #10b981 !important; } /* Emerald */
-        .text-warning { color: #f59e0b !important; } /* Amber */
-        .text-danger { color: #ec4899 !important; }  /* Pink/Crimson */
-        
-        .badge.bg-success { background-color: #10b981 !important; }
-        .badge.bg-warning { background-color: #f59e0b !important; color: #fff !important;}
-        .badge.bg-danger { background-color: #ec4899 !important; }
+        /* 3. Glassy Navbar */
+        .navbar { 
+            background: rgba(13, 13, 18, 0.4) !important; 
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05); 
+        }
 
-        /* Navbar & Table Styling */
-        .navbar { border-bottom: 1px solid #374151; background-color: #111827; }
-        .table { color: #ffffff !important; }
-        .table-hover tbody tr:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
-        
-        /* Clean Search Bar */
+        /* 4. Frosted Inputs & Search Bars */
         .form-control, .form-select {
-            background-color: #111827;
-            border: 1px solid #374151;
-            color: #ffffff;
+            background-color: rgba(0, 0, 0, 0.2) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #ffffff !important;
+            backdrop-filter: blur(8px);
         }
         .form-control:focus, .form-select:focus {
-            background-color: #111827;
-            color: #ffffff;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
+            background-color: rgba(0, 0, 0, 0.4) !important;
+            border-color: #e30066 !important; /* Hot Pink Focus Glow */
+            box-shadow: 0 0 15px rgba(227, 0, 102, 0.3) !important;
         }
-        .form-control::placeholder { color: #9ca3af; }
+        .form-control::placeholder { color: rgba(255, 255, 255, 0.4) !important; }
+
+        /* Tables inside Glass */
+        .table { color: #ffffff !important; }
+        .table-hover tbody tr:hover { 
+            background-color: rgba(255, 255, 255, 0.05); 
+            backdrop-filter: blur(4px);
+        }
+
+        /* --- THE CYBER TRI-COLOR ACCENTS (Glassmorphism adapted) --- */
+        
+        /* Cyber Yellow (Used for 'PASS', Low Risk, and Primary Buttons) */
+        .text-success { color: #ffd100 !important; } 
+        .badge.bg-success { background-color: rgba(255, 209, 0, 0.15) !important; border: 1px solid rgba(255, 209, 0, 0.5); color: #ffd100 !important; }
+        .text-primary { color: #ffd100 !important; }
+        .bg-primary { background-color: rgba(255, 209, 0, 0.8) !important; color: #1a1a1a !important;}
+        .btn-primary { background-color: #ffd100 !important; color: #1a1a1a !important; border: none; font-weight: bold; }
+        .btn-primary:hover { background-color: #e6bc00 !important; box-shadow: 0 0 15px rgba(255, 209, 0, 0.4); }
+        
+        /* Hot Pink (Used for 'FAIL', High Risk, and Warnings) */
+        .text-danger { color: #e30066 !important; }  
+        .badge.bg-danger { background-color: rgba(227, 0, 102, 0.15) !important; border: 1px solid rgba(227, 0, 102, 0.5); color: #e30066 !important;}
+        .btn-outline-danger { color: #e30066; border-color: #e30066; }
+        .btn-outline-danger:hover { background-color: #e30066; color: #ffffff; box-shadow: 0 0 15px rgba(227, 0, 102, 0.4); }
+
+        /* Electric Purple (Used for Medium Risk) */
+        .text-warning { color: #b266ff !important; } 
+        .badge.bg-warning { background-color: rgba(178, 102, 255, 0.15) !important; border: 1px solid rgba(178, 102, 255, 0.5); color: #b266ff !important;}
     </style>
     {% block extra_css %}{% endblock %}
 </head>
