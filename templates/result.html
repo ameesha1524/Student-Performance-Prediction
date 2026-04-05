@@ -1,123 +1,296 @@
 {% extends "base.html" %}
-
-{% block title %}Prediction Result - EduPredict{% endblock %}
+{% block title %}Prediction Result — EduPredict{% endblock %}
 
 {% block extra_css %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .result-layout {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 32px 0 60px;
+    }
+    .verdict-card {
+        border-radius: var(--radius-lg);
+        padding: 36px;
+        margin-bottom: 20px;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        text-align: center;
+    }
+    .verdict-card.pass {
+        background: linear-gradient(135deg, rgba(74,222,128,0.06) 0%, var(--ink-2) 60%);
+        border-color: rgba(74,222,128,0.2);
+    }
+    .verdict-card.fail {
+        background: linear-gradient(135deg, rgba(248,113,113,0.06) 0%, var(--ink-2) 60%);
+        border-color: rgba(248,113,113,0.2);
+    }
+    .verdict-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        background: var(--ink-3);
+        border: 1px solid var(--border);
+        border-radius: 50px;
+        padding: 5px 14px;
+        margin-bottom: 20px;
+    }
+    .verdict-text {
+        font-family: 'DM Mono', monospace;
+        font-size: 4rem;
+        font-weight: 500;
+        line-height: 1;
+        margin-bottom: 20px;
+        letter-spacing: 0.1em;
+    }
+    .verdict-text.pass { color: var(--green); }
+    .verdict-text.fail { color: var(--red); }
+    .verdict-badges {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .verdict-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--ink-3);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 8px 16px;
+        font-family: 'DM Mono', monospace;
+        font-size: 0.82rem;
+        color: var(--text-muted);
+    }
+    .verdict-badge strong { color: var(--text); }
+
+    .insight-box {
+        background: var(--ink-3);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        padding: 14px 18px;
+        margin-top: 20px;
+        text-align: left;
+        font-size: 0.88rem;
+        color: var(--text-muted);
+        line-height: 1.6;
+    }
+    .insight-box i { color: var(--accent); margin-right: 6px; }
+
+    .models-card {
+        background: var(--ink-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+    .models-header {
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .models-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+    }
+    @media (max-width: 600px) { .models-grid { grid-template-columns: repeat(2,1fr); } }
+    .model-cell {
+        padding: 20px;
+        text-align: center;
+        border-right: 1px solid var(--border);
+    }
+    .model-cell:last-child { border-right: none; }
+    .model-cell.ensemble {
+        background: rgba(99,179,237,0.04);
+        border-right: none;
+    }
+    .model-name {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-bottom: 10px;
+    }
+    .model-cell.ensemble .model-name { color: var(--accent); }
+    .model-vote {
+        font-family: 'DM Mono', monospace;
+        font-size: 1rem;
+        font-weight: 500;
+        padding: 6px 14px;
+        border-radius: 6px;
+    }
+    .model-vote.pass { background: var(--green-soft); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+    .model-vote.fail { background: var(--red-soft); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+
+    .shap-card {
+        background: var(--ink-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-bottom: 24px;
+    }
+    .shap-header {
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .action-row {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+    }
+    .btn-action {
+        padding: 12px 28px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border-radius: var(--radius);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container pb-5" style="max-width: 900px; margin-top: 2rem;">
+<div class="result-layout">
     
-    <div class="card bg-dark-panel p-5 rounded-4 border-0 shadow text-center mb-4">
-        <h2 class="text-white mb-3">AI Prediction Result</h2>
-        
-        <h1 class="display-3 fw-bold text-{{ css_class }} mb-3">
-            {{ prediction_text }}
-        </h1>
-        
-        <div class="d-flex justify-content-center gap-3 mb-4">
-            <span class="badge bg-secondary fs-5 py-2 px-3">Grade: {{ grade }}</span>
-            <span class="badge bg-{{ css_class }} fs-5 py-2 px-3">{{ risk_level }}</span>
-            <span class="badge bg-primary fs-5 py-2 px-3">Total: {{ total_score }}/100</span>
-        </div>
-        
-        <p class="text-light fs-5 border border-secondary rounded p-3 bg-dark" style="background-color: rgba(255,255,255,0.05) !important;">
-            <i class="bi bi-robot me-2 text-primary"></i> {{ insight_text | safe }}
-        </p>
+    <div style="padding-bottom: 20px;">
+        <p class="text-muted mb-1" style="font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600;">AI Analysis Complete</p>
+        <h2 style="margin: 0; font-size: 1.7rem;">Prediction Result</h2>
     </div>
 
-    <div class="card bg-dark-panel p-4 rounded-4 border-0 shadow mb-4">
-        <h4 class="text-white mb-3"><i class="bi bi-cpu text-primary me-2"></i>Model Consensus Engine</h4>
-        <p class="text-secondary small mb-3">Behind the scenes: How our 4 different AI algorithms voted on this student's data.</p>
-        
-        <div class="row g-3 text-center">
+    <!-- Verdict Card -->
+    <div class="verdict-card {{ 'pass' if prediction_text == 'PASS' else 'fail' }}">
+        <div>
+            <span class="verdict-label">
+                <i class="bi bi-cpu"></i> Ensemble Decision
+            </span>
+        </div>
+        <div class="verdict-text {{ 'pass' if prediction_text == 'PASS' else 'fail' }}">
+            {{ prediction_text }}
+        </div>
+        <div class="verdict-badges">
+            <div class="verdict-badge">
+                Grade: <strong>{{ grade }}</strong>
+            </div>
+            <div class="verdict-badge">
+                Score: <strong>{{ total_score }}/100</strong>
+            </div>
+            <div class="verdict-badge" style="border-color:{{ 'rgba(74,222,128,0.3)' if risk_level == 'LOW RISK' else 'rgba(248,113,113,0.3)' }}; color:{{ 'var(--green)' if risk_level == 'LOW RISK' else 'var(--red)' }};">
+                {{ risk_level }}
+            </div>
+        </div>
+        {% if insight_text %}
+        <div class="insight-box">
+            <i class="bi bi-robot"></i>{{ insight_text | safe }}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Model Votes -->
+    <div class="models-card">
+        <div class="models-header">
+            <i class="bi bi-diagram-3" style="color: var(--accent);"></i>
+            <div>
+                <div style="font-size: 0.9rem; font-weight: 600;">Consensus Engine</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">How each model voted on this student's data</div>
+            </div>
+        </div>
+        <div class="models-grid">
             {% for model_name, vote in model_votes.items() %}
-            <div class="col-md-3">
-                <div class="p-3 border rounded h-100" style="border-color: #374151 !important; background-color: rgba(255,255,255,0.02);">
-                    <div class="text-secondary small text-uppercase fw-bold mb-2">{{ model_name }}</div>
-                    <span class="badge {{ 'bg-success' if vote == 'PASS' else 'bg-danger' }} w-100 py-2 fs-6">
-                        {{ vote }}
-                    </span>
-                </div>
+            <div class="model-cell">
+                <div class="model-name">{{ model_name }}</div>
+                <span class="model-vote {{ 'pass' if vote == 'PASS' else 'fail' }}">{{ vote }}</span>
             </div>
             {% endfor %}
-            
-            <div class="col-md-3">
-                <div class="p-3 border rounded h-100" style="border-color: #3b82f6 !important; background-color: rgba(59, 130, 246, 0.1);">
-                    <div class="text-primary small text-uppercase fw-bold mb-2">Final Ensemble</div>
-                    <span class="badge {{ 'bg-success' if prediction_text == 'PASS' else 'bg-danger' }} w-100 py-2 fs-6 shadow">
-                        {{ prediction_text }}
-                    </span>
-                </div>
+            <div class="model-cell ensemble">
+                <div class="model-name"><i class="bi bi-star-fill me-1"></i>Ensemble</div>
+                <span class="model-vote {{ 'pass' if prediction_text == 'PASS' else 'fail' }}">{{ prediction_text }}</span>
             </div>
         </div>
     </div>
 
-    <div class="card bg-dark-panel p-4 rounded-4 border-0 shadow">
-        <h4 class="text-white mb-1"><i class="bi bi-bar-chart-steps text-primary me-2"></i>AI Decision Breakdown</h4>
-        <p class="text-secondary small mb-4">SHAP Force Plot: How each metric influenced the final prediction. Green pushes toward Pass, Red pushes toward Fail.</p>
-        
-        <div style="height: 300px;">
+    <!-- SHAP Chart -->
+    <div class="shap-card">
+        <div class="shap-header">
+            <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 2px;">
+                <i class="bi bi-bar-chart-steps me-1" style="color: var(--accent);"></i>AI Decision Breakdown
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">
+                SHAP force plot — <span style="color: var(--green);">green pushes toward PASS</span>, <span style="color: var(--red);">red pushes toward FAIL</span>
+            </div>
+        </div>
+        <div style="padding: 20px; height: 260px;">
             <canvas id="shapChart"></canvas>
         </div>
     </div>
-    
-    <div class="text-center mt-4">
-        <a href="/predict_form" class="btn btn-outline-primary px-4 me-2">Predict Another</a>
-        <a href="/dashboard" class="btn btn-primary px-4">Go to Dashboard</a>
+
+    <!-- Actions -->
+    <div class="action-row">
+        <a href="/predict_form" class="btn btn-ghost btn-action">
+            <i class="bi bi-arrow-left me-1"></i> Predict Another
+        </a>
+        <a href="/dashboard" class="btn btn-primary btn-action">
+            Dashboard <i class="bi bi-arrow-right ms-1"></i>
+        </a>
     </div>
 
 </div>
 
 <script>
-    // Grab the mathematical impacts from Python
+    Chart.defaults.color = '#6b7a99';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+
     const impacts = {{ shap_impacts | tojson }};
-    const features = ['Attendance', 'Internal', 'Assignment', 'Quiz'];
-
-    // Dynamic coloring: Green for positive impact, Red for negative impact
-    const barColors = impacts.map(val => val >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(236, 72, 153, 0.8)');
-    const borderColors = impacts.map(val => val >= 0 ? '#10b981' : '#ec4899');
-
-    Chart.defaults.color = '#ffffff';
-    Chart.defaults.borderColor = '#374151';
+    const features = ['Attendance', 'Internal Exams', 'Assignments', 'Quizzes'];
+    const barColors = impacts.map(val => val >= 0 ? 'rgba(74,222,128,0.7)' : 'rgba(248,113,113,0.7)');
+    const borderColors = impacts.map(val => val >= 0 ? '#4ade80' : '#f87171');
 
     new Chart(document.getElementById('shapChart'), {
         type: 'bar',
         data: {
             labels: features,
             datasets: [{
-                label: 'Impact on Final Decision',
+                label: 'Impact',
                 data: impacts,
                 backgroundColor: barColors,
                 borderColor: borderColors,
                 borderWidth: 1,
-                borderRadius: 4
+                borderRadius: 6
             }]
         },
         options: {
-            indexAxis: 'y', // Makes the bar chart horizontal (Waterfall style)
+            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
-                            let val = context.raw.toFixed(2);
-                            return val > 0 ? `+${val} (Pushed towards Pass)` : `${val} (Pushed towards Fail)`;
+                        label: (ctx) => {
+                            const v = ctx.raw.toFixed(2);
+                            return v > 0 ? ` +${v} → toward PASS` : ` ${v} → toward FAIL`;
                         }
                     }
                 }
             },
             scales: {
                 x: {
-                    grid: { color: '#374151' },
-                    title: { display: true, text: 'Mathematical Weight (Log Odds)', color: '#9ca3af' }
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    title: { display: true, text: 'Log Odds Impact', color: '#6b7a99', font: { size: 11 } }
                 },
-                y: {
-                    grid: { display: false }
-                }
+                y: { grid: { display: false } }
             }
         }
     });
