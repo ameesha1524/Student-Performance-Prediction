@@ -7,6 +7,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, Response, jsonify
+from sqlalchemy import text
+from google import genai
 import joblib
 import numpy as np
 import pandas as pd
@@ -408,6 +410,10 @@ def predict_bulk():
             
     return render_template('upload.html')
 
+# --- INITIALIZE GEMINI AI ---
+# Get your free key at https://aistudio.google.com/
+client = genai.Client(api_key="AIzaSyD7BdoZPl86EwpztmRTxCnPJp5ulaci5Oo")
+
 @app.route('/api/ask_assistant', methods=['POST'])
 @login_required
 def ask_assistant():
@@ -415,40 +421,71 @@ def ask_assistant():
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
-        # Get the text the teacher typed into the search bar
-        query = request.json.get('question', '').lower()
+        query = request.json.get('question', '')
+
+        prompt = f"""
+        You are a SQL expert. I have a SQLite table named 'prediction_history' with these columns:
+        - student_roll (TEXT)
+        - attendance (FLOAT)
+        - cat1 (FLOAT)
+        - cat2 (FLOAT)
+        - assignment_quiz (FLOAT)
+        - total_score (FLOAT)
+        - risk_level (TEXT: 'LOW RISK', 'MEDIUM RISK', 'HIGH RISK')
+        - grade (TEXT: 'S', 'A', 'B', 'C', 'D', 'E', 'F')
+        - result (TEXT: 'PASS', 'FAIL')
+
+        Translate this user request into a SQL WHERE clause: "{query}"
+
+        RULES:
+        1. Output ONLY the raw SQL condition. No explanations.
+        2. Do NOT output the word "WHERE".
+        3. Do NOT output markdown formatting like ```sql.
+        4. Example output: total_score < 30 AND attendance >= 75
+        """
+
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+
+        # --- THE FIX: AGGRESSIVELY CLEAN THE AI'S OUTPUT ---
+        where_clause = response.text.strip()
         
-        # Fetch all students for this teacher
-        records = PredictionHistory.query.filter_by(teacher_id=current_user.id).all()
+        # Remove Markdown backticks if the AI ignored rule #3
+        where_clause = where_clause.replace('```sql', '').replace('```', '').strip()
+        
+        # Remove the word 'WHERE' if the AI ignored rule #2
+        if where_clause.lower().startswith('where '):
+            where_clause = where_clause[6:].strip()
+        # ---------------------------------------------------
+        
+        if ";" in where_clause or "DROP" in where_clause.upper() or "DELETE" in where_clause.upper():
+            return jsonify({"error": "Unsafe query generated. Please rephrase your request."})
+
+        sql_string = f"SELECT student_roll, attendance, grade, result, risk_level FROM prediction_history WHERE teacher_id = :tid AND ({where_clause})"
+        sql_query = text(sql_string)
+        
+        result_proxy = db.session.execute(sql_query, {"tid": current_user.id})
+        rows = result_proxy.fetchall()
+
         results = []
-        
-        # A lightweight keyword-based filter so your UI works immediately
-        for r in records:
-            match = True
-            
-            # Filter by Risk
-            if "high risk" in query and r.risk_level != "HIGH RISK": match = False
-            elif "medium risk" in query and r.risk_level != "MEDIUM RISK": match = False
-            elif "low risk" in query and r.risk_level != "LOW RISK": match = False
-            
-            # Filter by Pass/Fail
-            if "fail" in query and r.result != "FAIL": match = False
-            if "pass" in query and "fail" not in query and r.result != "PASS": match = False
-            
-            # If the student matches the keywords, add them to the results
-            if match:
-                results.append({
-                    "student_roll": r.student_roll,
-                    "attendance": r.attendance,
-                    "grade": r.grade,
-                    "result": r.result,
-                    "risk_level": r.risk_level
-                })
-                
+        for row in rows:
+            results.append({
+                "student_roll": row[0],  
+                "attendance": row[1],
+                "grade": row[2],
+                "result": row[3],
+                "risk_level": row[4]
+            })
+
         return jsonify({"results": results})
-        
+
     except Exception as e:
-        return jsonify({"error": str(e)})
+        # Send the ACTUAL Python error to the dashboard so we can debug it
+        error_msg = str(e)
+        print(f"AI Assistant Error: {error_msg}")
+        return jsonify({"error": f"System Crash: {error_msg}"})
     
 @app.route('/student_portal')
 @login_required
