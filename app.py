@@ -6,10 +6,6 @@ from threading import Thread
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
-<<<<<<< HEAD
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, jsonify
-=======
->>>>>>> fbaf7677b010c53f65c0638a50957f87e7dbec19
 from sqlalchemy import text
 from google import genai
 import joblib
@@ -52,7 +48,7 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 # --- GEMINI AI CONFIGURATION ---
-client = genai.Client(api_key="YOUR_API_KEY_HERE")
+client = genai.Client(api_key="somthing")
 
 # --- MACHINE LEARNING MODEL LOADING ---
 try:
@@ -169,14 +165,46 @@ def ask_assistant():
         return jsonify({"error": "Unauthorized"}), 403
     try:
         query = request.json.get('question', '')
-        prompt = f"SQL expert prompt for '{query}' rule logic..."
+        
+        # THE FIX: A highly strict, locked-down prompt to prevent chatty responses
+        prompt = f"""
+        You are a silent SQL query generator. I have a SQLite table named 'prediction_history' with these columns:
+        - student_roll (TEXT)
+        - attendance (FLOAT)
+        - cat1 (FLOAT)
+        - cat2 (FLOAT)
+        - assignment_quiz (FLOAT)
+        - total_score (FLOAT)
+        - risk_level (TEXT: 'LOW RISK', 'MEDIUM RISK', 'HIGH RISK')
+        - grade (TEXT: 'S', 'A', 'B', 'C', 'D', 'E', 'F')
+        - result (TEXT: 'PASS', 'FAIL')
+
+        Translate this user request into a SQL WHERE clause: "{query}"
+
+        STRICT RULES:
+        1. Output ONLY the raw SQL condition. Absolutely no conversational text, no greetings, no explanations.
+        2. Do NOT output the word "WHERE".
+        3. Do NOT output markdown formatting or code blocks.
+        4. Example correct output: total_score < 30 AND attendance >= 75
+        """
+        
         response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-        where_clause = response.text.strip().replace('```sql', '').replace('```', '').replace('WHERE ', '')
+        
+        # Clean up the response just in case it disobeys slightly
+        where_clause = response.text.strip().replace('```sql', '').replace('```', '').strip()
+        if where_clause.lower().startswith('where '):
+            where_clause = where_clause[6:].strip()
+            
+        # Failsafe: If the AI still writes an essay, catch it before it crashes the DB
+        if len(where_clause) > 150 or "As an SQL expert" in where_clause:
+             return jsonify({"error": "AI generated an invalid response. Please rephrase your query to be simpler (e.g., 'show me students with a B grade')."})
         
         sql_query = text(f"SELECT student_roll, attendance, grade, result, risk_level FROM prediction_history WHERE teacher_id = :tid AND ({where_clause})")
         result_proxy = db.session.execute(sql_query, {"tid": current_user.id})
         results = [{"student_roll": r[0], "attendance": r[1], "grade": r[2], "result": r[3], "risk_level": r[4]} for r in result_proxy.fetchall()]
+        
         return jsonify({"results": results})
+        
     except Exception as e:
         return jsonify({"error": str(e)})
 
@@ -238,83 +266,8 @@ def upload_csv():
             return redirect(url_for('dashboard'))
     return render_template('upload.html')
 
-# --- INITIALIZE GEMINI AI ---
-# Get your free key at https://aistudio.google.com/
-client = genai.Client(api_key="AIzaSyD7BdoZPl86EwpztmRTxCnPJp5ulaci5Oo")
+# --- STUDENT PORTAL & BUDDY SYSTEM ---
 
-@app.route('/api/ask_assistant', methods=['POST'])
-@login_required
-def ask_assistant():
-    if current_user.role not in ['teacher', 'admin']:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    try:
-        query = request.json.get('question', '')
-
-        prompt = f"""
-        You are a SQL expert. I have a SQLite table named 'prediction_history' with these columns:
-        - student_roll (TEXT)
-        - attendance (FLOAT)
-        - cat1 (FLOAT)
-        - cat2 (FLOAT)
-        - assignment_quiz (FLOAT)
-        - total_score (FLOAT)
-        - risk_level (TEXT: 'LOW RISK', 'MEDIUM RISK', 'HIGH RISK')
-        - grade (TEXT: 'S', 'A', 'B', 'C', 'D', 'E', 'F')
-        - result (TEXT: 'PASS', 'FAIL')
-
-        Translate this user request into a SQL WHERE clause: "{query}"
-
-        RULES:
-        1. Output ONLY the raw SQL condition. No explanations.
-        2. Do NOT output the word "WHERE".
-        3. Do NOT output markdown formatting like ```sql.
-        4. Example output: total_score < 30 AND attendance >= 75
-        """
-
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
-
-        # --- THE FIX: AGGRESSIVELY CLEAN THE AI'S OUTPUT ---
-        where_clause = response.text.strip()
-        
-        # Remove Markdown backticks if the AI ignored rule #3
-        where_clause = where_clause.replace('```sql', '').replace('```', '').strip()
-        
-        # Remove the word 'WHERE' if the AI ignored rule #2
-        if where_clause.lower().startswith('where '):
-            where_clause = where_clause[6:].strip()
-        # ---------------------------------------------------
-        
-        if ";" in where_clause or "DROP" in where_clause.upper() or "DELETE" in where_clause.upper():
-            return jsonify({"error": "Unsafe query generated. Please rephrase your request."})
-
-        sql_string = f"SELECT student_roll, attendance, grade, result, risk_level FROM prediction_history WHERE teacher_id = :tid AND ({where_clause})"
-        sql_query = text(sql_string)
-        
-        result_proxy = db.session.execute(sql_query, {"tid": current_user.id})
-        rows = result_proxy.fetchall()
-
-        results = []
-        for row in rows:
-            results.append({
-                "student_roll": row[0],  
-                "attendance": row[1],
-                "grade": row[2],
-                "result": row[3],
-                "risk_level": row[4]
-            })
-
-        return jsonify({"results": results})
-
-    except Exception as e:
-        # Send the ACTUAL Python error to the dashboard so we can debug it
-        error_msg = str(e)
-        print(f"AI Assistant Error: {error_msg}")
-        return jsonify({"error": f"System Crash: {error_msg}"})
-    
 @app.route('/student_portal')
 @login_required
 def student_portal():
