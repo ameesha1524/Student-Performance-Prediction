@@ -15,8 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of your application code and your ML model
 COPY . /app/
 
-# Expose port 8080 (Google Cloud Run's default)
+# The port is dynamically injected by cloud providers, this is just documentation
 EXPOSE 8080
 
-# Command to run the app using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "app:app"]
+# Command to run the app using Gunicorn (Optimized for 512MB RAM limits)
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 2 --timeout 120 app:app"]
