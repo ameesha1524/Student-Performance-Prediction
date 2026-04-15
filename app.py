@@ -23,7 +23,7 @@ app.jinja_env.globals.update(zip=zip)
 
 # --- CONFIGURATION ---
 # Security key for session signing
-app.config['SECRET_KEY'] = 'vit_cse_secure_key_2026'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'vit_cse_secure_key_2026')
 
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
